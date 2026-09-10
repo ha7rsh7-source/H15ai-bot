@@ -313,7 +313,7 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             ],
         )
-         reply = response.choices[0].message.content or ""
+      reply = response.choices[0].message.content or ""
 
         if "<think>" in reply:
             reply = reply.split("<think>", 1)[0]
