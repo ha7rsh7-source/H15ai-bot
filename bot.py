@@ -124,8 +124,8 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     user_message = update.message.text
-    history = user_histories[user_id]
-        global total_messages
+    history = user_histories[user_id] 
+    global total_messages
     total_messages += 1
     total_users.add(user_id)
 
