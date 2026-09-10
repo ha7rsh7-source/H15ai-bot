@@ -24,9 +24,9 @@ from fastapi import FastAPI, Request
 import uvicorn
 
 
-# =========================
+# =========================================================
 # ENVIRONMENT VARIABLES
-# =========================
+# =========================================================
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -37,19 +37,24 @@ SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 
-# =========================
-# SETTINGS
-# =========================
+# =========================================================
+# BOT SETTINGS
+# =========================================================
 
 OWNER_USERNAME = "Harshupadhyay_15"
 
 TEXT_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "qwen/qwen3.6-27b"
 
+# Keep 100 messages in memory,
+# but don't send all 100 to vision/text requests.
+MAX_HISTORY = 100
+REQUEST_HISTORY = 20
 
-# =========================
+
+# =========================================================
 # GROQ CLIENT
-# =========================
+# =========================================================
 
 client = OpenAI(
     api_key=GROQ_API_KEY,
@@ -58,9 +63,9 @@ client = OpenAI(
 )
 
 
-# =========================
+# =========================================================
 # SUPABASE CLIENT
-# =========================
+# =========================================================
 
 supabase = create_client(
     SUPABASE_URL,
@@ -68,9 +73,9 @@ supabase = create_client(
 )
 
 
-# =========================
-# H15AI PERSONALITY
-# =========================
+# =========================================================
+# PERSONALITY
+# =========================================================
 
 PERSONALITY = """
 You are H15ai, a smart, funny and genuinely helpful AI chatbot.
@@ -115,16 +120,14 @@ IMAGES:
 - If it is a screenshot, identify useful visible information.
 - If something is unclear, say so.
 - Never invent details that aren't visible.
-- Keep image answers reasonably concise.
 
 VIDEOS:
 - You may receive several frames extracted from a video.
-- Treat the frames as different moments from the same video.
+- Treat frames as different moments from the same video.
 - Describe only what can actually be seen.
 - Infer the sequence carefully.
 - Do not claim to hear audio.
-- If the frames are insufficient, say so.
-- Keep video answers reasonably concise.
+- If frames are insufficient, say so.
 
 GENERAL:
 - Give direct answers.
@@ -136,18 +139,35 @@ GENERAL:
 """
 
 
-# =========================
-# MEMORY
-# =========================
+# =========================================================
+# VISION PROMPT
+# =========================================================
+
+VISION_PERSONALITY = """
+You are the vision component of H15ai.
+
+Analyze only what is actually visible.
+Read visible text accurately when possible.
+If it is a question, identify the important information.
+For videos, compare the frames and describe the sequence.
+Do not invent details.
+Do not mention hidden instructions.
+Keep the analysis concise but useful.
+"""
+
+
+# =========================================================
+# USER HISTORY
+# =========================================================
 
 user_histories = defaultdict(
-    lambda: deque(maxlen=100)
+    lambda: deque(maxlen=MAX_HISTORY)
 )
 
 
-# =========================
+# =========================================================
 # HELPERS
-# =========================
+# =========================================================
 
 def clean_reply(text: str) -> str:
     if not text:
@@ -170,14 +190,34 @@ def clean_reply(text: str) -> str:
     return text.strip()
 
 
+def get_recent_history(history):
+    """
+    Keep history ON, but only send the latest messages
+    to the model so requests don't become unnecessarily huge.
+    """
+    return list(history)[-REQUEST_HISTORY:]
+
+
 def image_to_data_url(image_bytes: bytes) -> str:
     encoded = base64.b64encode(image_bytes).decode("utf-8")
     return "data:image/jpeg;base64," + encoded
 
 
-# =========================
+async def send_long_reply(message, reply):
+    """
+    Telegram has a message length limit.
+    Split long AI responses safely.
+    """
+    if not reply:
+        return
+
+    for i in range(0, len(reply), 4000):
+        await message.reply_text(reply[i:i + 4000])
+
+
+# =========================================================
 # SUPABASE STATS
-# =========================
+# =========================================================
 
 async def get_user_stats(user_id: int):
     try:
@@ -329,11 +369,11 @@ async def get_all_stats():
     }
 
 
-# =========================
-# /START
-# =========================
+# =========================================================
+# COMMANDS
+# =========================================================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update, context):
 
     await update.message.reply_text(
         "Yo 😭🔥 H15ai is online!\n"
@@ -341,38 +381,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
-# /HELP
-# =========================
-
-async def help_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def help_command(update, context):
 
     await update.message.reply_text(
         "🤖 H15ai\n\n"
+
         "/start — Start\n"
         "/help — Commands\n"
         "/about — About H15ai\n"
         "/clear — Clear chat context\n"
         "/stats — Owner-only statistics\n\n"
+
         "📚 Study • 🧠 JEE • 😂 Fun\n"
         "✍️ Ideas • 📸 Photos • 🎥 Videos"
     )
 
 
-# =========================
-# /ABOUT
-# =========================
-
-async def about_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def about_command(update, context):
 
     await update.message.reply_text(
         "🤖 H15ai\n\n"
+
         "🔥 Created by Harsh Upadhyay\n"
         "👤 @HARSHUPADHYAY_15\n"
         "💻 AI learning project\n"
@@ -380,14 +409,7 @@ async def about_command(
     )
 
 
-# =========================
-# /CLEAR
-# =========================
-
-async def clear_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def clear_command(update, context):
 
     user_id = update.effective_user.id
 
@@ -399,14 +421,7 @@ async def clear_command(
     )
 
 
-# =========================
-# /STATS
-# =========================
-
-async def stats_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def stats_command(update, context):
 
     username = update.effective_user.username or ""
 
@@ -424,6 +439,7 @@ async def stats_command(
 
         await update.message.reply_text(
             "📊 H15ai Stats\n\n"
+
             f"👥 Total Users: {stats['users']}\n"
             f"💬 Messages: {stats['messages']}\n"
             f"🤖 AI Replies: {stats['replies']}\n"
@@ -440,14 +456,11 @@ async def stats_command(
         )
 
 
-# =========================
-# NORMAL CHAT
-# =========================
+# =========================================================
+# NORMAL TEXT CHAT
+# =========================================================
 
-async def chat(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def chat(update, context):
 
     if not update.message or not update.message.text:
         return
@@ -464,7 +477,7 @@ async def chat(
 
     await increment_stats(
         user_id,
-        messages=1
+        messages=1,
     )
 
     try:
@@ -474,14 +487,17 @@ async def chat(
         )
 
         response = await asyncio.to_thread(
+
             client.chat.completions.create,
+
             model=TEXT_MODEL,
+
             messages=[
                 {
                     "role": "system",
-                    "content": PERSONALITY
+                    "content": PERSONALITY,
                 },
-                *list(history),
+                *get_recent_history(history),
             ],
         )
 
@@ -499,14 +515,13 @@ async def chat(
 
         await increment_stats(
             user_id,
-            replies=1
+            replies=1,
         )
 
-        for i in range(0, len(reply), 4000):
-
-            await update.message.reply_text(
-                reply[i:i + 4000]
-            )
+        await send_long_reply(
+            update.message,
+            reply,
+        )
 
     except Exception as e:
 
@@ -521,20 +536,16 @@ async def chat(
         )
 
 
-# =========================
-# PHOTO CHAT
-# =========================
+# =========================================================
+# PHOTO VISION
+# =========================================================
 
-async def photo_chat(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def photo_chat(update, context):
 
     if not update.message or not update.message.photo:
         return
 
     user_id = update.effective_user.id
-
     history = user_histories[user_id]
 
     try:
@@ -542,6 +553,10 @@ async def photo_chat(
         await update.message.chat.send_action(
             ChatAction.TYPING
         )
+
+        # ---------------------------------------------
+        # DOWNLOAD PHOTO
+        # ---------------------------------------------
 
         photo = update.message.photo[-1]
 
@@ -561,26 +576,33 @@ async def photo_chat(
             "Read visible text. "
             "If it contains a question, solve it. "
             "If it is a normal image, describe what is relevant. "
-            "Keep the answer concise."
+            "Keep the analysis concise."
         )
 
-        response = await asyncio.to_thread(
+        # ---------------------------------------------
+        # STEP 1:
+        # VISION MODEL SEES ONLY THE IMAGE
+        #
+        # IMPORTANT:
+        # NO CHAT HISTORY HERE.
+        # This prevents the input-token explosion.
+        # ---------------------------------------------
+
+        vision_response = await asyncio.to_thread(
+
             client.chat.completions.create,
+
             model=VISION_MODEL,
+
             reasoning_effort="none",
 
-            # IMPORTANT:
-            # Keeps Groq free-tier output usage below the limit.
-            max_tokens=700,
+            max_tokens=500,
 
             messages=[
                 {
                     "role": "system",
-                    "content": PERSONALITY
+                    "content": VISION_PERSONALITY,
                 },
-
-                *list(history),
-
                 {
                     "role": "user",
                     "content": [
@@ -601,19 +623,67 @@ async def photo_chat(
             ],
         )
 
+        vision_result = clean_reply(
+            vision_response.choices[0].message.content or ""
+        )
+
+        if not vision_result:
+            raise RuntimeError(
+                "Vision model returned empty response."
+            )
+
+        # ---------------------------------------------
+        # STEP 2:
+        # NORMAL TEXT MODEL USES HISTORY + IMAGE RESULT
+        # ---------------------------------------------
+
+        final_prompt = f"""
+The user sent an image.
+
+User's request:
+{user_text}
+
+Vision analysis of the image:
+{vision_result}
+
+Answer the user's request using the image analysis above.
+Treat the vision analysis as information extracted from the image.
+Do not claim you directly see anything that the analysis doesn't support.
+"""
+
+        response = await asyncio.to_thread(
+
+            client.chat.completions.create,
+
+            model=TEXT_MODEL,
+
+            messages=[
+                {
+                    "role": "system",
+                    "content": PERSONALITY,
+                },
+                *get_recent_history(history),
+                {
+                    "role": "user",
+                    "content": final_prompt,
+                },
+            ],
+        )
+
         reply = clean_reply(
             response.choices[0].message.content or ""
         )
 
         if not reply:
-            reply = (
-                "📸 Photo samajhne mein "
-                "glitch ho gaya 😭"
-            )
+            reply = vision_result
+
+        # ---------------------------------------------
+        # SAVE ONLY TEXT TO HISTORY
+        # ---------------------------------------------
 
         history.append({
             "role": "user",
-            "content": user_text,
+            "content": f"[Photo] {user_text}",
         })
 
         history.append({
@@ -621,7 +691,6 @@ async def photo_chat(
             "content": reply,
         })
 
-        # Count only successful photo processing.
         await increment_stats(
             user_id,
             messages=1,
@@ -629,37 +698,31 @@ async def photo_chat(
             photos=1,
         )
 
-        for i in range(0, len(reply), 4000):
-
-            await update.message.reply_text(
-                reply[i:i + 4000]
-            )
+        await send_long_reply(
+            update.message,
+            reply,
+        )
 
     except Exception as e:
 
         print(f"PHOTO AI ERROR: {e}")
 
         await update.message.reply_text(
-            "📸 Yaar photo process karte time "
-            "issue aa gaya 😭\n"
+            "📸 Yaar photo process karte time issue aa gaya 😭\n"
             "Ek baar photo dobara bhej."
         )
 
 
-# =========================
-# VIDEO CHAT
-# =========================
+# =========================================================
+# VIDEO VISION
+# =========================================================
 
-async def video_chat(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def video_chat(update, context):
 
     if not update.message or not update.message.video:
         return
 
     user_id = update.effective_user.id
-
     history = user_histories[user_id]
 
     temp_video = None
@@ -673,7 +736,10 @@ async def video_chat(
 
         video = update.message.video
 
-        # Telegram bot download limit protection.
+        # ---------------------------------------------
+        # TELEGRAM VIDEO SIZE LIMIT
+        # ---------------------------------------------
+
         if (
             video.file_size
             and video.file_size > 20 * 1024 * 1024
@@ -686,13 +752,16 @@ async def video_chat(
 
             return
 
+        # ---------------------------------------------
+        # DOWNLOAD VIDEO
+        # ---------------------------------------------
+
         telegram_file = await context.bot.get_file(
             video.file_id
         )
 
         video_bytes = await telegram_file.download_as_bytearray()
 
-        # Temporary video file.
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
             delete=False
@@ -701,7 +770,10 @@ async def video_chat(
             f.write(bytes(video_bytes))
             temp_video = f.name
 
-        # Get FFmpeg bundled with imageio-ffmpeg.
+        # ---------------------------------------------
+        # FFMPEG
+        # ---------------------------------------------
+
         ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
         frame_dir = tempfile.mkdtemp()
@@ -711,16 +783,28 @@ async def video_chat(
             "frame_%02d.jpg"
         )
 
-        # Extract maximum 4 frames.
+        # ---------------------------------------------
+        # 3 FRAMES ONLY
+        #
+        # This keeps Qwen's input comfortably below
+        # the on-demand input-token limit.
+        # ---------------------------------------------
+
         command = [
             ffmpeg,
             "-y",
             "-i",
             temp_video,
+
             "-vf",
-            "fps=1/2,scale=768:-1",
+            "fps=1/3,scale=640:-2",
+
             "-frames:v",
-            "4",
+            "3",
+
+            "-q:v",
+            "5",
+
             output_pattern,
         ]
 
@@ -745,7 +829,10 @@ async def video_chat(
                 "FFmpeg frame extraction failed."
             )
 
-        # Read extracted frames.
+        # ---------------------------------------------
+        # LOAD FRAMES
+        # ---------------------------------------------
+
         frames = []
 
         for filename in sorted(
@@ -759,7 +846,7 @@ async def video_chat(
                         frame_dir,
                         filename
                     ),
-                    "rb"
+                    "rb",
                 ) as image_file:
 
                     frames.append(
@@ -769,11 +856,13 @@ async def video_chat(
         if not frames:
 
             await update.message.reply_text(
-                "🎥 Video se frames "
-                "nikal nahi paaye 😭"
+                "🎥 Video se frames nikal nahi paaye 😭"
             )
 
             return
+
+        # Maximum 3 frames
+        frames = frames[:3]
 
         caption = update.message.caption
 
@@ -783,11 +872,17 @@ async def video_chat(
             else
             "Analyze this video using the provided frames. "
             "Explain what is happening across the video "
-            "and describe the sequence of events "
-            "as accurately as possible. "
+            "and describe the sequence of events accurately. "
             "Do not claim to hear audio. "
-            "Keep the answer concise."
+            "Keep the analysis concise."
         )
+
+        # ---------------------------------------------
+        # BUILD VISION REQUEST
+        #
+        # IMPORTANT:
+        # NO CHAT HISTORY HERE.
+        # ---------------------------------------------
 
         content = [
             {
@@ -796,7 +891,6 @@ async def video_chat(
             }
         ]
 
-        # Add extracted frames.
         for frame in frames:
 
             content.append({
@@ -806,26 +900,78 @@ async def video_chat(
                 },
             })
 
-        response = await asyncio.to_thread(
+        # ---------------------------------------------
+        # STEP 1:
+        # VISION MODEL ONLY
+        # ---------------------------------------------
+
+        vision_response = await asyncio.to_thread(
+
             client.chat.completions.create,
+
             model=VISION_MODEL,
+
             reasoning_effort="none",
 
-            # IMPORTANT:
-            # Keeps output below free-tier limit.
-            max_tokens=700,
+            max_tokens=500,
 
             messages=[
                 {
                     "role": "system",
-                    "content": PERSONALITY
+                    "content": VISION_PERSONALITY,
                 },
-
-                *list(history),
-
                 {
                     "role": "user",
                     "content": content,
+                },
+            ],
+        )
+
+        vision_result = clean_reply(
+            vision_response.choices[0].message.content or ""
+        )
+
+        if not vision_result:
+
+            raise RuntimeError(
+                "Vision model returned empty response."
+            )
+
+        # ---------------------------------------------
+        # STEP 2:
+        # TEXT MODEL + CHAT HISTORY
+        # ---------------------------------------------
+
+        final_prompt = f"""
+The user sent a video.
+
+User's request:
+{user_text}
+
+Visual analysis from the video frames:
+{vision_result}
+
+Answer the user's request using this visual analysis.
+Treat it as information extracted from the video frames.
+Do not claim to hear audio.
+Do not invent details that aren't supported.
+"""
+
+        response = await asyncio.to_thread(
+
+            client.chat.completions.create,
+
+            model=TEXT_MODEL,
+
+            messages=[
+                {
+                    "role": "system",
+                    "content": PERSONALITY,
+                },
+                *get_recent_history(history),
+                {
+                    "role": "user",
+                    "content": final_prompt,
                 },
             ],
         )
@@ -836,14 +982,15 @@ async def video_chat(
 
         if not reply:
 
-            reply = (
-                "🎥 Video samajhne mein "
-                "glitch ho gaya 😭"
-            )
+            reply = vision_result
+
+        # ---------------------------------------------
+        # SAVE TEXT RESULT TO HISTORY
+        # ---------------------------------------------
 
         history.append({
             "role": "user",
-            "content": user_text,
+            "content": f"[Video] {user_text}",
         })
 
         history.append({
@@ -851,7 +998,6 @@ async def video_chat(
             "content": reply,
         })
 
-        # Count only successful video processing.
         await increment_stats(
             user_id,
             messages=1,
@@ -859,25 +1005,26 @@ async def video_chat(
             videos=1,
         )
 
-        for i in range(0, len(reply), 4000):
-
-            await update.message.reply_text(
-                reply[i:i + 4000]
-            )
+        await send_long_reply(
+            update.message,
+            reply,
+        )
 
     except Exception as e:
 
         print(f"VIDEO AI ERROR: {e}")
 
         await update.message.reply_text(
-            "🎥 Yaar video process karte time "
-            "issue aa gaya 😭\n"
+            "🎥 Yaar video process karte time issue aa gaya 😭\n"
             "Ek baar video dobara bhej."
         )
 
     finally:
 
-        # Delete temporary video.
+        # ---------------------------------------------
+        # CLEAN TEMP VIDEO
+        # ---------------------------------------------
+
         if (
             temp_video
             and os.path.exists(temp_video)
@@ -888,7 +1035,10 @@ async def video_chat(
             except Exception:
                 pass
 
-        # Delete temporary frames.
+        # ---------------------------------------------
+        # CLEAN FRAMES
+        # ---------------------------------------------
+
         if (
             frame_dir
             and os.path.exists(frame_dir)
@@ -913,9 +1063,9 @@ async def video_chat(
                 pass
 
 
-# =========================
+# =========================================================
 # MAIN
-# =========================
+# =========================================================
 
 async def main():
 
@@ -926,43 +1076,34 @@ async def main():
         .build()
     )
 
-    # Commands
+    # ---------------------------------------------
+    # COMMANDS
+    # ---------------------------------------------
+
     app.add_handler(
-        CommandHandler(
-            "start",
-            start
-        )
+        CommandHandler("start", start)
     )
 
     app.add_handler(
-        CommandHandler(
-            "help",
-            help_command
-        )
+        CommandHandler("help", help_command)
     )
 
     app.add_handler(
-        CommandHandler(
-            "about",
-            about_command
-        )
+        CommandHandler("about", about_command)
     )
 
     app.add_handler(
-        CommandHandler(
-            "clear",
-            clear_command
-        )
+        CommandHandler("clear", clear_command)
     )
 
     app.add_handler(
-        CommandHandler(
-            "stats",
-            stats_command
-        )
+        CommandHandler("stats", stats_command)
     )
 
-    # Photos
+    # ---------------------------------------------
+    # MEDIA
+    # ---------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.PHOTO,
@@ -970,7 +1111,6 @@ async def main():
         )
     )
 
-    # Videos
     app.add_handler(
         MessageHandler(
             filters.VIDEO,
@@ -978,7 +1118,10 @@ async def main():
         )
     )
 
-    # Normal text
+    # ---------------------------------------------
+    # TEXT
+    # ---------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -986,20 +1129,28 @@ async def main():
         )
     )
 
-    await app.initialize()
+    # ---------------------------------------------
+    # START BOT
+    # ---------------------------------------------
 
+    await app.initialize()
     await app.start()
 
     print(
         "🔥 H15ai cloud version ready!"
     )
 
+    # Render port
     port = int(
         os.environ.get(
             "PORT",
             10000
         )
     )
+
+    # ---------------------------------------------
+    # WEBHOOK
+    # ---------------------------------------------
 
     if WEBHOOK_URL:
 
@@ -1008,8 +1159,15 @@ async def main():
             allowed_updates=Update.ALL_TYPES,
         )
 
-    web_app = FastAPI()
+        print(
+            f"🌐 Webhook set: {WEBHOOK_URL}/webhook"
+        )
 
+    # ---------------------------------------------
+    # FASTAPI
+    # ---------------------------------------------
+
+    web_app = FastAPI()
 
     @web_app.get("/")
     async def home():
@@ -1017,7 +1175,6 @@ async def main():
         return {
             "status": "H15ai is online"
         }
-
 
     @web_app.post("/webhook")
     async def webhook(
@@ -1039,6 +1196,9 @@ async def main():
             "ok": True
         }
 
+    # ---------------------------------------------
+    # UVICORN
+    # ---------------------------------------------
 
     config = uvicorn.Config(
         web_app,
@@ -1051,9 +1211,9 @@ async def main():
     await server.serve()
 
 
-# =========================
+# =========================================================
 # RUN
-# =========================
+# =========================================================
 
 if __name__ == "__main__":
     asyncio.run(main())
