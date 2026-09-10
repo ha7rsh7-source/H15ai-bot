@@ -2,6 +2,8 @@ import os
 import asyncio
 import base64
 import re
+import tempfile
+import subprocess
 from collections import defaultdict, deque
 
 from openai import OpenAI
@@ -38,7 +40,7 @@ client = OpenAI(
 
 
 # =========================
-# H15AI PERSONALITY
+# PERSONALITY
 # =========================
 
 PERSONALITY = """
@@ -84,6 +86,14 @@ IMAGES:
 - If something is unclear, say so.
 - Never invent details that aren't visible.
 
+VIDEOS:
+- You may receive several frames extracted from a video.
+- Treat the frames as different moments from the same video.
+- Describe what can actually be seen.
+- If the user asks what happens in the video, infer the sequence from the frames.
+- Do not claim to hear audio because this version does not process audio.
+- If the sampled frames are insufficient, clearly say that.
+
 GENERAL:
 - Give direct answers.
 - Use bullets/headings when useful.
@@ -98,8 +108,6 @@ GENERAL:
 # MEMORY + STATS
 # =========================
 
-# Latest 100 messages per user.
-# This is temporary memory and resets after a restart/redeploy.
 user_histories = defaultdict(lambda: deque(maxlen=100))
 
 total_messages = 0
@@ -108,14 +116,13 @@ total_users = set()
 
 
 # =========================
-# CLEAN AI OUTPUT
+# HELPERS
 # =========================
 
 def clean_reply(text: str) -> str:
     if not text:
         return ""
 
-    # Remove complete leaked thinking blocks.
     text = re.sub(
         r"<think>.*?</think>",
         "",
@@ -123,7 +130,6 @@ def clean_reply(text: str) -> str:
         flags=re.DOTALL | re.IGNORECASE,
     )
 
-    # Remove unfinished thinking blocks.
     text = re.sub(
         r"<think>.*$",
         "",
@@ -132,6 +138,11 @@ def clean_reply(text: str) -> str:
     )
 
     return text.strip()
+
+
+def image_to_data_url(image_bytes: bytes) -> str:
+    encoded = base64.b64encode(image_bytes).decode("utf-8")
+    return "data:image/jpeg;base64," + encoded
 
 
 # =========================
@@ -154,7 +165,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/clear — Clear your chat context\n"
         "/stats — Owner-only statistics\n\n"
         "📚 Study • 🧠 JEE • 😂 Fun • ✍️ Ideas\n"
-        "📸 Photo bhejo aur uske baare mein pucho!"
+        "📸 Photo bhejo aur uske baare mein pucho!\n"
+        "🎥 Video bhejo aur uske frames analyze karwao!"
     )
 
 
@@ -219,9 +231,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
 
     try:
-        await update.message.chat.send_action(
-            ChatAction.TYPING
-        )
+        await update.message.chat.send_action(ChatAction.TYPING)
 
         response = await asyncio.to_thread(
             client.chat.completions.create,
@@ -285,11 +295,8 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = user_histories[user_id]
 
     try:
-        await update.message.chat.send_action(
-            ChatAction.TYPING
-        )
+        await update.message.chat.send_action(ChatAction.TYPING)
 
-        # Highest resolution Telegram photo
         photo = update.message.photo[-1]
 
         telegram_file = await context.bot.get_file(
@@ -297,10 +304,6 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         image_bytes = await telegram_file.download_as_bytearray()
-
-        base64_image = base64.b64encode(
-            bytes(image_bytes)
-        ).decode("utf-8")
 
         caption = update.message.caption
 
@@ -314,8 +317,6 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "If it is a normal image, describe what is relevant."
             )
 
-        # IMPORTANT:
-        # This block is completely outside the messages list.
         response = await asyncio.to_thread(
             client.chat.completions.create,
             model=VISION_MODEL,
@@ -336,9 +337,8 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": (
-                                    "data:image/jpeg;base64,"
-                                    + base64_image
+                                "url": image_to_data_url(
+                                    bytes(image_bytes)
                                 )
                             },
                         },
@@ -381,11 +381,251 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
+# VIDEO CHAT
+# =========================
+
+async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global total_messages
+    global total_replies
+
+    if not update.message:
+        return
+
+    video = update.message.video
+
+    if not video:
+        return
+
+    user_id = update.effective_user.id
+
+    total_messages += 1
+    total_users.add(user_id)
+
+    history = user_histories[user_id]
+
+    temp_video = None
+
+    try:
+        await update.message.chat.send_action(ChatAction.TYPING)
+
+        # Telegram cloud Bot API generally limits downloads to 20 MB.
+        if video.file_size and video.file_size > 20 * 1024 * 1024:
+            await update.message.reply_text(
+                "🎥 Video thoda bada hai 😭\n"
+                "20 MB ke andar wala video bhej."
+            )
+            return
+
+        telegram_file = await context.bot.get_file(
+            video.file_id
+        )
+
+        video_bytes = await telegram_file.download_as_bytearray()
+
+        # Temporary video file
+        with tempfile.NamedTemporaryFile(
+            suffix=".mp4",
+            delete=False
+        ) as f:
+            f.write(bytes(video_bytes))
+            temp_video = f.name
+
+        # Get video duration using ffprobe
+        duration_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            temp_video,
+        ]
+
+        duration_result = await asyncio.to_thread(
+            subprocess.run,
+            duration_cmd,
+            capture_output=True,
+            text=True,
+        )
+
+        try:
+            duration = float(
+                duration_result.stdout.strip()
+            )
+        except Exception:
+            duration = 10.0
+
+        # Keep processing lightweight.
+        # Maximum 6 frames.
+        frame_count = min(
+            6,
+            max(3, int(duration / 3))
+        )
+
+        frame_count = min(frame_count, 6)
+
+        frames = []
+
+        # Extract frames at evenly spaced timestamps.
+        for index in range(frame_count):
+            if duration <= 0:
+                timestamp = 0
+            else:
+                timestamp = (
+                    duration * index / frame_count
+                    + duration / (frame_count * 2)
+                )
+
+            frame_path = (
+                f"{temp_video}_{index}.jpg"
+            )
+
+            frame_cmd = [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(timestamp),
+                "-i",
+                temp_video,
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=768:-1",
+                frame_path,
+            ]
+
+            result = await asyncio.to_thread(
+                subprocess.run,
+                frame_cmd,
+                capture_output=True,
+            )
+
+            if result.returncode == 0 and os.path.exists(
+                frame_path
+            ):
+                with open(frame_path, "rb") as image_file:
+                    frames.append(
+                        image_file.read()
+                    )
+
+                try:
+                    os.remove(frame_path)
+                except Exception:
+                    pass
+
+        if not frames:
+            await update.message.reply_text(
+                "🎥 Video se frames nikal nahi paaye 😭"
+            )
+            return
+
+        caption = update.message.caption
+
+        if caption:
+            user_text = caption
+        else:
+            user_text = (
+                "Analyze this video from the provided frames. "
+                "Explain what is happening across the video, "
+                "in the correct sequence as much as possible. "
+                "Mention important visible details."
+            )
+
+        content = [
+            {
+                "type": "text",
+                "text": user_text,
+            }
+        ]
+
+        for frame in frames:
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_to_data_url(frame)
+                    },
+                }
+            )
+
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
+            model=VISION_MODEL,
+            reasoning_effort="none",
+            messages=[
+                {
+                    "role": "system",
+                    "content": PERSONALITY,
+                },
+                *list(history),
+                {
+                    "role": "user",
+                    "content": content,
+                },
+            ],
+        )
+
+        reply = clean_reply(
+            response.choices[0].message.content or ""
+        )
+
+        if not reply:
+            reply = (
+                "🎥 Video samajhne mein glitch ho gaya 😭"
+            )
+
+        total_replies += 1
+
+        history.append({
+            "role": "user",
+            "content": user_text,
+        })
+
+        history.append({
+            "role": "assistant",
+            "content": reply,
+        })
+
+        for i in range(0, len(reply), 4000):
+            await update.message.reply_text(
+                reply[i:i + 4000]
+            )
+
+    except FileNotFoundError:
+        print("FFMPEG ERROR: ffmpeg/ffprobe not found")
+
+        await update.message.reply_text(
+            "🎥 Video system ka setup incomplete hai 😭\n"
+            "Render mein FFmpeg add karna padega."
+        )
+
+    except Exception as e:
+        print(f"VIDEO AI ERROR: {e}")
+
+        await update.message.reply_text(
+            "🎥 Yaar video process karte time issue aa gaya 😭\n"
+            "Ek baar video dobara bhej."
+        )
+
+    finally:
+        if temp_video and os.path.exists(temp_video):
+            try:
+                os.remove(temp_video)
+            except Exception:
+                pass
+
+
+# =========================
 # MAIN
 # =========================
 
 async def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .build()
+    )
 
     app.add_handler(
         CommandHandler("start", start)
@@ -407,19 +647,27 @@ async def main():
         CommandHandler("stats", stats_command)
     )
 
-    # Photos
+    # PHOTO
     app.add_handler(
         MessageHandler(
             filters.PHOTO,
-            photo_chat,
+            photo_chat
         )
     )
 
-    # Normal text
+    # VIDEO
+    app.add_handler(
+        MessageHandler(
+            filters.VIDEO,
+            video_chat
+        )
+    )
+
+    # NORMAL TEXT
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            chat,
+            chat
         )
     )
 
@@ -432,7 +680,9 @@ async def main():
         os.environ.get("PORT", 10000)
     )
 
-    webhook_url = os.environ.get("WEBHOOK_URL")
+    webhook_url = os.environ.get(
+        "WEBHOOK_URL"
+    )
 
     if webhook_url:
         await app.bot.set_webhook(
@@ -457,11 +707,11 @@ async def main():
             app.bot,
         )
 
-        await app.update_queue.put(update)
+        await app.update_queue.put(
+            update
+        )
 
-        return {
-            "ok": True
-        }
+        return {"ok": True}
 
     config = uvicorn.Config(
         web_app,
@@ -469,7 +719,9 @@ async def main():
         port=port,
     )
 
-    server = uvicorn.Server(config)
+    server = uvicorn.Server(
+        config
+    )
 
     await server.serve()
 
