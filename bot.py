@@ -162,10 +162,10 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if history and history[-1]["role"] == "user":
             history.pop()
 
-        await update.message.reply_text(
+               await update.message.reply_text(
             "Bhai 😭 AI side pe issue aa gaya.\n"
             "Ek baar message dobara bhej."
-        
+        )
 
 
 async def main():
