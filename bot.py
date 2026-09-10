@@ -25,8 +25,7 @@ import uvicorn
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
-OWNER_USERNAME = "HARSHUPADHYAY_15"
-
+OWNER_USERNAME = "Harshupadhyay_15"
 TEXT_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "qwen/qwen3.6-27b"
 
