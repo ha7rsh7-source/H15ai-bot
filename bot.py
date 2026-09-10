@@ -156,17 +156,16 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i in range(0, len(reply), 4000):
             await update.message.reply_text(reply[i:i + 4000])
 
-    except Exception as e:
+        except Exception as e:
         print(f"AI ERROR: {e}")
 
         if history and history[-1]["role"] == "user":
             history.pop()
 
-               await update.message.reply_text(
+        await update.message.reply_text(
             "Bhai 😭 AI side pe issue aa gaya.\n"
             "Ek baar message dobara bhej."
         )
-
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
