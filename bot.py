@@ -6,6 +6,7 @@ import tempfile
 import subprocess
 from collections import defaultdict, deque
 
+import imageio_ffmpeg
 from openai import OpenAI
 from telegram import Update
 from telegram.constants import ChatAction
@@ -92,7 +93,7 @@ VIDEOS:
 - Describe what can actually be seen.
 - If the user asks what happens in the video, infer the sequence from the frames.
 - Do not claim to hear audio because this version does not process audio.
-- If the sampled frames are insufficient, clearly say that.
+- If the sampled frames are insufficient, clearly say so.
 
 GENERAL:
 - Give direct answers.
@@ -182,7 +183,6 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
     user_histories[user_id].clear()
 
     await update.message.reply_text(
@@ -388,12 +388,7 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global total_messages
     global total_replies
 
-    if not update.message:
-        return
-
-    video = update.message.video
-
-    if not video:
+    if not update.message or not update.message.video:
         return
 
     user_id = update.effective_user.id
@@ -408,7 +403,9 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.chat.send_action(ChatAction.TYPING)
 
-        # Telegram cloud Bot API generally limits downloads to 20 MB.
+        video = update.message.video
+
+        # Keep downloads lightweight for Render free tier.
         if video.file_size and video.file_size > 20 * 1024 * 1024:
             await update.message.reply_text(
                 "🎥 Video thoda bada hai 😭\n"
@@ -422,7 +419,7 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         video_bytes = await telegram_file.download_as_bytearray()
 
-        # Temporary video file
+        # Save temporary video
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
             delete=False
@@ -430,89 +427,86 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f.write(bytes(video_bytes))
             temp_video = f.name
 
-        # Get video duration using ffprobe
-        duration_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
+        # Get FFmpeg executable supplied by imageio-ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+
+        # Extract up to 6 frames.
+        frame_dir = tempfile.mkdtemp()
+
+        output_pattern = os.path.join(
+            frame_dir,
+            "frame_%02d.jpg"
+        )
+
+        command = [
+            ffmpeg,
+            "-y",
+            "-i",
             temp_video,
+            "-vf",
+            "fps=1/2,scale=768:-1",
+            "-frames:v",
+            "6",
+            output_pattern,
         ]
 
-        duration_result = await asyncio.to_thread(
+        result = await asyncio.to_thread(
             subprocess.run,
-            duration_cmd,
+            command,
             capture_output=True,
-            text=True,
         )
 
-        try:
-            duration = float(
-                duration_result.stdout.strip()
+        if result.returncode != 0:
+            error_text = result.stderr.decode(
+                errors="ignore"
             )
-        except Exception:
-            duration = 10.0
 
-        # Keep processing lightweight.
-        # Maximum 6 frames.
-        frame_count = min(
-            6,
-            max(3, int(duration / 3))
-        )
+            print(
+                "FFMPEG ERROR:",
+                error_text
+            )
 
-        frame_count = min(frame_count, 6)
+            raise RuntimeError(
+                "FFmpeg frame extraction failed."
+            )
 
         frames = []
 
-        # Extract frames at evenly spaced timestamps.
-        for index in range(frame_count):
-            if duration <= 0:
-                timestamp = 0
-            else:
-                timestamp = (
-                    duration * index / frame_count
-                    + duration / (frame_count * 2)
+        for filename in sorted(
+            os.listdir(frame_dir)
+        ):
+            if not filename.endswith(".jpg"):
+                continue
+
+            frame_path = os.path.join(
+                frame_dir,
+                filename
+            )
+
+            with open(
+                frame_path,
+                "rb"
+            ) as image_file:
+                frames.append(
+                    image_file.read()
                 )
 
-            frame_path = (
-                f"{temp_video}_{index}.jpg"
-            )
-
-            frame_cmd = [
-                "ffmpeg",
-                "-y",
-                "-ss",
-                str(timestamp),
-                "-i",
-                temp_video,
-                "-frames:v",
-                "1",
-                "-vf",
-                "scale=768:-1",
-                frame_path,
-            ]
-
-            result = await asyncio.to_thread(
-                subprocess.run,
-                frame_cmd,
-                capture_output=True,
-            )
-
-            if result.returncode == 0 and os.path.exists(
-                frame_path
-            ):
-                with open(frame_path, "rb") as image_file:
-                    frames.append(
-                        image_file.read()
+        # Remove temporary frame directory
+        for filename in os.listdir(frame_dir):
+            try:
+                os.remove(
+                    os.path.join(
+                        frame_dir,
+                        filename
                     )
+                )
+            except Exception:
+                pass
 
-                try:
-                    os.remove(frame_path)
-                except Exception:
-                    pass
+        try:
+            os.rmdir(frame_dir)
+        except Exception:
+            pass
 
         if not frames:
             await update.message.reply_text(
@@ -526,10 +520,10 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_text = caption
         else:
             user_text = (
-                "Analyze this video from the provided frames. "
-                "Explain what is happening across the video, "
-                "in the correct sequence as much as possible. "
-                "Mention important visible details."
+                "Analyze this video using the provided frames. "
+                "Explain what is happening across the video "
+                "and describe the sequence of events as accurately "
+                "as possible."
             )
 
         content = [
@@ -591,14 +585,6 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 reply[i:i + 4000]
             )
-
-    except FileNotFoundError:
-        print("FFMPEG ERROR: ffmpeg/ffprobe not found")
-
-        await update.message.reply_text(
-            "🎥 Video system ka setup incomplete hai 😭\n"
-            "Render mein FFmpeg add karna padega."
-        )
 
     except Exception as e:
         print(f"VIDEO AI ERROR: {e}")
@@ -707,9 +693,7 @@ async def main():
             app.bot,
         )
 
-        await app.update_queue.put(
-            update
-        )
+        await app.update_queue.put(update)
 
         return {"ok": True}
 
