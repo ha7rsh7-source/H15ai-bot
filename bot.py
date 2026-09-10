@@ -312,24 +312,14 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             ],
         )
+         reply = response.choices[0].message.content or ""
 
-        reply = response.choices[0].message.content
-                reply = re.sub(
-            r"<think>.*?</think>",
-            "",
-            reply,
-            flags=re.DOTALL | re.IGNORECASE
-        )
-
-        reply = re.sub(
-            r"<think>.*$",
-            "",
-            reply,
-            flags=re.DOTALL | re.IGNORECASE
-        )
+        if "<think>" in reply:
+            reply = reply.split("<think>", 1)[0]
 
         reply = reply.strip()
 
+        
         if not reply:
             reply = "Bhai 😭 photo samajhne mein glitch ho gaya."
 
