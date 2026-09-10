@@ -8,6 +8,8 @@ from collections import defaultdict, deque
 
 import imageio_ffmpeg
 from openai import OpenAI
+from supabase import create_client
+
 from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import (
@@ -29,6 +31,9 @@ import uvicorn
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
+
 OWNER_USERNAME = "Harshupadhyay_15"
 
 TEXT_MODEL = "openai/gpt-oss-120b"
@@ -37,6 +42,12 @@ VISION_MODEL = "qwen/qwen3.6-27b"
 client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
+    timeout=120.0,
+)
+
+supabase = create_client(
+    SUPABASE_URL,
+    SUPABASE_SECRET_KEY,
 )
 
 
@@ -70,7 +81,7 @@ PERSONALITY:
 GENDER:
 - Never assume gender from name, username, profile or writing style.
 - Do not automatically call everyone "bhai".
-- Use "bhai" only if the user uses it or their style clearly suggests it.
+- Use "bhai" only if the user uses it.
 - Otherwise prefer neutral words like "yaar".
 
 STUDY:
@@ -90,10 +101,10 @@ IMAGES:
 VIDEOS:
 - You may receive several frames extracted from a video.
 - Treat the frames as different moments from the same video.
-- Describe what can actually be seen.
-- If the user asks what happens in the video, infer the sequence from the frames.
-- Do not claim to hear audio because this version does not process audio.
-- If the sampled frames are insufficient, clearly say so.
+- Describe only what can actually be seen.
+- Infer the sequence carefully.
+- Do not claim to hear audio.
+- If the frames are insufficient, say so.
 
 GENERAL:
 - Give direct answers.
@@ -106,14 +117,12 @@ GENERAL:
 
 
 # =========================
-# MEMORY + STATS
+# MEMORY
 # =========================
 
-user_histories = defaultdict(lambda: deque(maxlen=100))
-
-total_messages = 0
-total_replies = 0
-total_users = set()
+user_histories = defaultdict(
+    lambda: deque(maxlen=100)
+)
 
 
 # =========================
@@ -142,36 +151,195 @@ def clean_reply(text: str) -> str:
 
 
 def image_to_data_url(image_bytes: bytes) -> str:
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
-    return "data:image/jpeg;base64," + encoded
+    encoded = base64.b64encode(
+        image_bytes
+    ).decode("utf-8")
+
+    return (
+        "data:image/jpeg;base64,"
+        + encoded
+    )
+
+
+# =========================
+# SUPABASE STATS
+# =========================
+
+async def get_user_stats(user_id: int):
+    def query():
+        return (
+            supabase
+            .table("bot_stats")
+            .select("*")
+            .eq("id", user_id)
+            .execute()
+        )
+
+    result = await asyncio.to_thread(query)
+
+    if result.data:
+        return result.data[0]
+
+    return None
+
+
+async def ensure_user(user_id: int):
+    existing = await get_user_stats(user_id)
+
+    if existing:
+        return existing
+
+    def insert():
+        return (
+            supabase
+            .table("bot_stats")
+            .insert({
+                "id": user_id,
+                "total_messages": 0,
+                "total_replies": 0,
+                "total_users": 1,
+                "total_photos": 0,
+                "total_videos": 0,
+            })
+            .execute()
+        )
+
+    result = await asyncio.to_thread(insert)
+
+    if result.data:
+        return result.data[0]
+
+    return None
+
+
+async def increment_stats(
+    user_id: int,
+    messages=0,
+    replies=0,
+    photos=0,
+    videos=0,
+):
+    try:
+        current = await ensure_user(user_id)
+
+        if not current:
+            return
+
+        updated = {
+            "total_messages": (
+                int(current.get("total_messages", 0))
+                + messages
+            ),
+            "total_replies": (
+                int(current.get("total_replies", 0))
+                + replies
+            ),
+            "total_users": 1,
+            "total_photos": (
+                int(current.get("total_photos", 0))
+                + photos
+            ),
+            "total_videos": (
+                int(current.get("total_videos", 0))
+                + videos
+            ),
+        }
+
+        def update():
+            return (
+                supabase
+                .table("bot_stats")
+                .update(updated)
+                .eq("id", user_id)
+                .execute()
+            )
+
+        await asyncio.to_thread(update)
+
+    except Exception as e:
+        print(
+            f"SUPABASE STATS ERROR: {e}"
+        )
+
+
+async def get_all_stats():
+    def query():
+        return (
+            supabase
+            .table("bot_stats")
+            .select("*")
+            .execute()
+        )
+
+    result = await asyncio.to_thread(query)
+
+    rows = result.data or []
+
+    total_users = len(rows)
+
+    total_messages = sum(
+        int(row.get("total_messages", 0))
+        for row in rows
+    )
+
+    total_replies = sum(
+        int(row.get("total_replies", 0))
+        for row in rows
+    )
+
+    total_photos = sum(
+        int(row.get("total_photos", 0))
+        for row in rows
+    )
+
+    total_videos = sum(
+        int(row.get("total_videos", 0))
+        for row in rows
+    )
+
+    return {
+        "users": total_users,
+        "messages": total_messages,
+        "replies": total_replies,
+        "photos": total_photos,
+        "videos": total_videos,
+    }
 
 
 # =========================
 # COMMANDS
 # =========================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     await update.message.reply_text(
         "Yo 😭🔥 H15ai is online!\n"
         "Bata, kya scene hai?"
     )
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     await update.message.reply_text(
         "🤖 H15ai\n\n"
         "/start — Start\n"
         "/help — Commands\n"
         "/about — About H15ai\n"
-        "/clear — Clear your chat context\n"
+        "/clear — Clear chat context\n"
         "/stats — Owner-only statistics\n\n"
-        "📚 Study • 🧠 JEE • 😂 Fun • ✍️ Ideas\n"
-        "📸 Photo bhejo aur uske baare mein pucho!\n"
-        "🎥 Video bhejo aur uske frames analyze karwao!"
+        "📚 Study • 🧠 JEE • 😂 Fun\n"
+        "✍️ Ideas • 📸 Photos • 🎥 Videos"
     )
 
 
-async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def about_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     await update.message.reply_text(
         "🤖 H15ai\n\n"
         "🔥 Created by Harsh Upadhyay\n"
@@ -181,8 +349,12 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def clear_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     user_id = update.effective_user.id
+
     user_histories[user_id].clear()
 
     await update.message.reply_text(
@@ -191,37 +363,59 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    username = update.effective_user.username or ""
+async def stats_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    username = (
+        update.effective_user.username
+        or ""
+    )
 
     if username.lower() != OWNER_USERNAME.lower():
-        await update.message.reply_text("❌ Owner only.")
+        await update.message.reply_text(
+            "❌ Owner only."
+        )
         return
 
-    await update.message.reply_text(
-        f"📊 H15ai Stats\n\n"
-        f"👥 Users: {len(total_users)}\n"
-        f"💬 Messages: {total_messages}\n"
-        f"🤖 AI Replies: {total_replies}"
-    )
+    try:
+        stats = await get_all_stats()
+
+        await update.message.reply_text(
+            "📊 H15ai Stats\n\n"
+            f"👥 Total Users: {stats['users']}\n"
+            f"💬 Messages: {stats['messages']}\n"
+            f"🤖 AI Replies: {stats['replies']}\n"
+            f"📸 Photos: {stats['photos']}\n"
+            f"🎥 Videos: {stats['videos']}"
+        )
+
+    except Exception as e:
+        print(
+            f"STATS ERROR: {e}"
+        )
+
+        await update.message.reply_text(
+            "📊 Stats database se connect nahi ho pa raha 😭"
+        )
 
 
 # =========================
 # TEXT CHAT
 # =========================
 
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global total_messages
-    global total_replies
+async def chat(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    if not update.message:
+        return
 
-    if not update.message or not update.message.text:
+    if not update.message.text:
         return
 
     user_id = update.effective_user.id
     user_message = update.message.text
-
-    total_messages += 1
-    total_users.add(user_id)
 
     history = user_histories[user_id]
 
@@ -230,8 +424,15 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "content": user_message,
     })
 
+    await increment_stats(
+        user_id,
+        messages=1,
+    )
+
     try:
-        await update.message.chat.send_action(ChatAction.TYPING)
+        await update.message.chat.send_action(
+            ChatAction.TYPING
+        )
 
         response = await asyncio.to_thread(
             client.chat.completions.create,
@@ -246,28 +447,44 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         reply = clean_reply(
-            response.choices[0].message.content or ""
+            response.choices[0]
+            .message.content
+            or ""
         )
 
         if not reply:
-            reply = "Yaar 😭 kuch glitch ho gaya."
-
-        total_replies += 1
+            reply = (
+                "Yaar 😭 kuch glitch ho gaya."
+            )
 
         history.append({
             "role": "assistant",
             "content": reply,
         })
 
-        for i in range(0, len(reply), 4000):
+        await increment_stats(
+            user_id,
+            replies=1,
+        )
+
+        for i in range(
+            0,
+            len(reply),
+            4000
+        ):
             await update.message.reply_text(
                 reply[i:i + 4000]
             )
 
     except Exception as e:
-        print(f"TEXT AI ERROR: {e}")
+        print(
+            f"TEXT AI ERROR: {e}"
+        )
 
-        if history and history[-1]["role"] == "user":
+        if (
+            history
+            and history[-1]["role"] == "user"
+        ):
             history.pop()
 
         await update.message.reply_text(
@@ -280,30 +497,43 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # PHOTO CHAT
 # =========================
 
-async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global total_messages
-    global total_replies
+async def photo_chat(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    if not update.message:
+        return
 
-    if not update.message or not update.message.photo:
+    if not update.message.photo:
         return
 
     user_id = update.effective_user.id
 
-    total_messages += 1
-    total_users.add(user_id)
+    await increment_stats(
+        user_id,
+        messages=1,
+        photos=1,
+    )
 
     history = user_histories[user_id]
 
     try:
-        await update.message.chat.send_action(ChatAction.TYPING)
+        await update.message.chat.send_action(
+            ChatAction.TYPING
+        )
 
         photo = update.message.photo[-1]
 
-        telegram_file = await context.bot.get_file(
-            photo.file_id
+        telegram_file = (
+            await context.bot.get_file(
+                photo.file_id
+            )
         )
 
-        image_bytes = await telegram_file.download_as_bytearray()
+        image_bytes = (
+            await telegram_file
+            .download_as_bytearray()
+        )
 
         caption = update.message.caption
 
@@ -312,9 +542,10 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             user_text = (
                 "Analyze this image carefully. "
-                "Read any visible text. "
+                "Read visible text. "
                 "If it contains a question, solve it. "
-                "If it is a normal image, describe what is relevant."
+                "If it is a normal image, describe "
+                "what is relevant."
             )
 
         response = await asyncio.to_thread(
@@ -348,13 +579,16 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         reply = clean_reply(
-            response.choices[0].message.content or ""
+            response.choices[0]
+            .message.content
+            or ""
         )
 
         if not reply:
-            reply = "📸 Photo samajhne mein glitch ho gaya 😭"
-
-        total_replies += 1
+            reply = (
+                "📸 Photo samajhne mein "
+                "glitch ho gaya 😭"
+            )
 
         history.append({
             "role": "user",
@@ -366,16 +600,28 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "content": reply,
         })
 
-        for i in range(0, len(reply), 4000):
+        await increment_stats(
+            user_id,
+            replies=1,
+        )
+
+        for i in range(
+            0,
+            len(reply),
+            4000
+        ):
             await update.message.reply_text(
                 reply[i:i + 4000]
             )
 
     except Exception as e:
-        print(f"PHOTO AI ERROR: {e}")
+        print(
+            f"PHOTO AI ERROR: {e}"
+        )
 
         await update.message.reply_text(
-            "📸 Yaar photo process karte time issue aa gaya 😭\n"
+            "📸 Yaar photo process karte time "
+            "issue aa gaya 😭\n"
             "Ek baar photo dobara bhej."
         )
 
@@ -384,42 +630,58 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # VIDEO CHAT
 # =========================
 
-async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global total_messages
-    global total_replies
+async def video_chat(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    if not update.message:
+        return
 
-    if not update.message or not update.message.video:
+    if not update.message.video:
         return
 
     user_id = update.effective_user.id
 
-    total_messages += 1
-    total_users.add(user_id)
+    await increment_stats(
+        user_id,
+        messages=1,
+        videos=1,
+    )
 
     history = user_histories[user_id]
 
     temp_video = None
+    frame_dir = None
 
     try:
-        await update.message.chat.send_action(ChatAction.TYPING)
+        await update.message.chat.send_action(
+            ChatAction.TYPING
+        )
 
         video = update.message.video
 
-        # Keep downloads lightweight for Render free tier.
-        if video.file_size and video.file_size > 20 * 1024 * 1024:
+        if (
+            video.file_size
+            and video.file_size
+            > 20 * 1024 * 1024
+        ):
             await update.message.reply_text(
                 "🎥 Video thoda bada hai 😭\n"
                 "20 MB ke andar wala video bhej."
             )
             return
 
-        telegram_file = await context.bot.get_file(
-            video.file_id
+        telegram_file = (
+            await context.bot.get_file(
+                video.file_id
+            )
         )
 
-        video_bytes = await telegram_file.download_as_bytearray()
+        video_bytes = (
+            await telegram_file
+            .download_as_bytearray()
+        )
 
-        # Save temporary video
         with tempfile.NamedTemporaryFile(
             suffix=".mp4",
             delete=False
@@ -427,10 +689,11 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f.write(bytes(video_bytes))
             temp_video = f.name
 
-        # Get FFmpeg executable supplied by imageio-ffmpeg
-        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        ffmpeg = (
+            imageio_ffmpeg
+            .get_ffmpeg_exe()
+        )
 
-        # Extract up to 6 frames.
         frame_dir = tempfile.mkdtemp()
 
         output_pattern = os.path.join(
@@ -457,8 +720,10 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if result.returncode != 0:
-            error_text = result.stderr.decode(
-                errors="ignore"
+            error_text = (
+                result.stderr.decode(
+                    errors="ignore"
+                )
             )
 
             print(
@@ -475,7 +740,9 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for filename in sorted(
             os.listdir(frame_dir)
         ):
-            if not filename.endswith(".jpg"):
+            if not filename.endswith(
+                ".jpg"
+            ):
                 continue
 
             frame_path = os.path.join(
@@ -491,23 +758,6 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image_file.read()
                 )
 
-        # Remove temporary frame directory
-        for filename in os.listdir(frame_dir):
-            try:
-                os.remove(
-                    os.path.join(
-                        frame_dir,
-                        filename
-                    )
-                )
-            except Exception:
-                pass
-
-        try:
-            os.rmdir(frame_dir)
-        except Exception:
-            pass
-
         if not frames:
             await update.message.reply_text(
                 "🎥 Video se frames nikal nahi paaye 😭"
@@ -520,10 +770,11 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_text = caption
         else:
             user_text = (
-                "Analyze this video using the provided frames. "
-                "Explain what is happening across the video "
-                "and describe the sequence of events as accurately "
-                "as possible."
+                "Analyze this video using the "
+                "provided frames. Explain what is "
+                "happening across the video and "
+                "describe the sequence of events "
+                "as accurately as possible."
             )
 
         content = [
@@ -538,7 +789,9 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": image_to_data_url(frame)
+                        "url": image_to_data_url(
+                            frame
+                        )
                     },
                 }
             )
@@ -561,15 +814,16 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         reply = clean_reply(
-            response.choices[0].message.content or ""
+            response.choices[0]
+            .message.content
+            or ""
         )
 
         if not reply:
             reply = (
-                "🎥 Video samajhne mein glitch ho gaya 😭"
+                "🎥 Video samajhne mein "
+                "glitch ho gaya 😭"
             )
-
-        total_replies += 1
 
         history.append({
             "role": "user",
@@ -581,23 +835,57 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "content": reply,
         })
 
-        for i in range(0, len(reply), 4000):
+        await increment_stats(
+            user_id,
+            replies=1,
+        )
+
+        for i in range(
+            0,
+            len(reply),
+            4000
+        ):
             await update.message.reply_text(
                 reply[i:i + 4000]
             )
 
     except Exception as e:
-        print(f"VIDEO AI ERROR: {e}")
+        print(
+            f"VIDEO AI ERROR: {e}"
+        )
 
         await update.message.reply_text(
-            "🎥 Yaar video process karte time issue aa gaya 😭\n"
+            "🎥 Yaar video process karte time "
+            "issue aa gaya 😭\n"
             "Ek baar video dobara bhej."
         )
 
     finally:
-        if temp_video and os.path.exists(temp_video):
+        if (
+            temp_video
+            and os.path.exists(temp_video)
+        ):
             try:
                 os.remove(temp_video)
+            except Exception:
+                pass
+
+        if frame_dir and os.path.exists(
+            frame_dir
+        ):
+            try:
+                for filename in os.listdir(
+                    frame_dir
+                ):
+                    os.remove(
+                        os.path.join(
+                            frame_dir,
+                            filename
+                        )
+                    )
+
+                os.rmdir(frame_dir)
+
             except Exception:
                 pass
 
@@ -614,26 +902,40 @@ async def main():
     )
 
     app.add_handler(
-        CommandHandler("start", start)
+        CommandHandler(
+            "start",
+            start
+        )
     )
 
     app.add_handler(
-        CommandHandler("help", help_command)
+        CommandHandler(
+            "help",
+            help_command
+        )
     )
 
     app.add_handler(
-        CommandHandler("about", about_command)
+        CommandHandler(
+            "about",
+            about_command
+        )
     )
 
     app.add_handler(
-        CommandHandler("clear", clear_command)
+        CommandHandler(
+            "clear",
+            clear_command
+        )
     )
 
     app.add_handler(
-        CommandHandler("stats", stats_command)
+        CommandHandler(
+            "stats",
+            stats_command
+        )
     )
 
-    # PHOTO
     app.add_handler(
         MessageHandler(
             filters.PHOTO,
@@ -641,7 +943,6 @@ async def main():
         )
     )
 
-    # VIDEO
     app.add_handler(
         MessageHandler(
             filters.VIDEO,
@@ -649,10 +950,10 @@ async def main():
         )
     )
 
-    # NORMAL TEXT
     app.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            filters.TEXT
+            & ~filters.COMMAND,
             chat
         )
     )
@@ -660,10 +961,15 @@ async def main():
     await app.initialize()
     await app.start()
 
-    print("🔥 H15ai cloud version ready!")
+    print(
+        "🔥 H15ai cloud version ready!"
+    )
 
     port = int(
-        os.environ.get("PORT", 10000)
+        os.environ.get(
+            "PORT",
+            10000
+        )
     )
 
     webhook_url = os.environ.get(
@@ -672,8 +978,12 @@ async def main():
 
     if webhook_url:
         await app.bot.set_webhook(
-            url=f"{webhook_url}/webhook",
-            allowed_updates=Update.ALL_TYPES,
+            url=(
+                f"{webhook_url}/webhook"
+            ),
+            allowed_updates=(
+                Update.ALL_TYPES
+            ),
         )
 
     web_app = FastAPI()
@@ -681,21 +991,28 @@ async def main():
     @web_app.get("/")
     async def home():
         return {
-            "status": "H15ai is online"
+            "status":
+            "H15ai is online"
         }
 
     @web_app.post("/webhook")
-    async def webhook(request: Request):
+    async def webhook(
+        request: Request
+    ):
         data = await request.json()
 
         update = Update.de_json(
             data,
-            app.bot,
+            app.bot
         )
 
-        await app.update_queue.put(update)
+        await app.update_queue.put(
+            update
+        )
 
-        return {"ok": True}
+        return {
+            "ok": True
+        }
 
     config = uvicorn.Config(
         web_app,
