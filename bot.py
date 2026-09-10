@@ -312,21 +312,17 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                 }
             ],
-        )
-      reply = response.choices[0].message.content or ""
+               reply = response.choices[0].message.content or ""
 
         if "<think>" in reply:
             reply = reply.split("<think>", 1)[0]
 
         reply = reply.strip()
 
-        
         if not reply:
-            reply = "Bhai 😭 photo samajhne mein glitch ho gaya."
+            reply = "📸 Photo samajhne mein glitch ho gaya 😭"
 
         total_replies += 1
-
-        # Keep text context from the photo conversation
         history.append({
             "role": "user",
             "content": user_text
