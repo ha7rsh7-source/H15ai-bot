@@ -2,6 +2,7 @@ import os
 import asyncio
 import base64
 from collections import defaultdict, deque
+import re
 
 from openai import OpenAI
 from telegram import Update
@@ -313,6 +314,21 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         reply = response.choices[0].message.content
+                reply = re.sub(
+            r"<think>.*?</think>",
+            "",
+            reply,
+            flags=re.DOTALL | re.IGNORECASE
+        )
+
+        reply = re.sub(
+            r"<think>.*$",
+            "",
+            reply,
+            flags=re.DOTALL | re.IGNORECASE
+        )
+
+        reply = reply.strip()
 
         if not reply:
             reply = "Bhai 😭 photo samajhne mein glitch ho gaya."
