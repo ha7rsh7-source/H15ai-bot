@@ -286,6 +286,7 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await asyncio.to_thread(
             client.chat.completions.create,
             model=VISION_MODEL,
+            reasoning_effort="none",
             messages=[
                 {
                     "role": "system",
