@@ -1,6 +1,4 @@
-from pathlib import Path
-
-code = '''import os
+import os
 import asyncio
 import base64
 import re
@@ -17,10 +15,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 from fastapi import FastAPI, Request
 import uvicorn
 
-
-# =========================
-# H15ai - clean production version
-# =========================
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -42,6 +36,7 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     timeout=120.0,
 )
+
 
 PERSONALITY = """
 You are H15ai, a smart, funny and genuinely helpful AI chatbot.
@@ -91,10 +86,8 @@ PRIVACY:
 """
 
 
-# Per-user temporary conversation context.
 histories = defaultdict(lambda: deque(maxlen=30))
 
-# Runtime counters. Persisted to Supabase when configured.
 stats = {
     "total_messages": 0,
     "total_replies": 0,
@@ -103,7 +96,6 @@ stats = {
     "total_videos": 0,
 }
 
-# Users seen during this running instance.
 known_users = set()
 
 health = {
@@ -118,10 +110,6 @@ health = {
 }
 
 
-# =========================
-# Health
-# =========================
-
 def is_owner(update: Update) -> bool:
     user = update.effective_user
     return bool(user and user.id == OWNER_ID)
@@ -129,7 +117,9 @@ def is_owner(update: Update) -> bool:
 
 def mark_success(service: str):
     health[f"{service}_ok"] = True
-    health["last_success"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    health["last_success"] = datetime.now(timezone.utc).strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
+    )
 
 
 def mark_error(service: str, exc: Exception):
@@ -141,14 +131,31 @@ def mark_error(service: str, exc: Exception):
 
 def health_question(text: str) -> bool:
     t = text.lower().strip()
+
     phrases = (
-        "health check", "health status", "bot health", "bot status",
-        "status bata", "status bta", "status kya", "sab sahi",
-        "sab theek", "sab thik", "koi error", "error hai",
-        "errors hai", "error bata", "error bta", "kaisa chal raha",
-        "kaise chal raha", "bot kaisa", "bot ka status",
-        "system status", "system check"
+        "health check",
+        "health status",
+        "bot health",
+        "bot status",
+        "status bata",
+        "status bta",
+        "status kya",
+        "sab sahi",
+        "sab theek",
+        "sab thik",
+        "koi error",
+        "error hai",
+        "errors hai",
+        "error bata",
+        "error bta",
+        "kaisa chal raha",
+        "kaise chal raha",
+        "bot kaisa",
+        "bot ka status",
+        "system status",
+        "system check",
     )
+
     return any(p in t for p in phrases)
 
 
@@ -161,26 +168,22 @@ def health_report() -> str:
         return "🟡 Not tested"
 
     return (
-        "🩺 H15ai Health Report\\n\\n"
-        f"🤖 Text AI: {mark(health['text_ok'])}\\n"
-        f"🖼️ Photo AI: {mark(health['photo_ok'])}\\n"
-        f"🎬 Video AI: {mark(health['video_ok'])}\\n"
-        f"🗄️ Supabase: {mark(health['supabase_ok'])}\\n\\n"
-        "📊 Stats\\n"
-        f"• Messages: {stats['total_messages']}\\n"
-        f"• Replies: {stats['total_replies']}\\n"
-        f"• Users: {stats['total_users']}\\n"
-        f"• Photos: {stats['total_photos']}\\n"
-        f"• Videos: {stats['total_videos']}\\n\\n"
-        f"⚠️ Runtime errors: {health['error_count']}\\n"
-        f"🕒 Last success: {health['last_success'] or 'None'}\\n"
+        "🩺 H15ai Health Report\n\n"
+        f"🤖 Text AI: {mark(health['text_ok'])}\n"
+        f"🖼️ Photo AI: {mark(health['photo_ok'])}\n"
+        f"🎬 Video AI: {mark(health['video_ok'])}\n"
+        f"🗄️ Supabase: {mark(health['supabase_ok'])}\n\n"
+        "📊 Stats\n"
+        f"• Messages: {stats['total_messages']}\n"
+        f"• Replies: {stats['total_replies']}\n"
+        f"• Users: {stats['total_users']}\n"
+        f"• Photos: {stats['total_photos']}\n"
+        f"• Videos: {stats['total_videos']}\n\n"
+        f"⚠️ Runtime errors: {health['error_count']}\n"
+        f"🕒 Last success: {health['last_success'] or 'None'}\n"
         f"❗ Last error: {health['last_error'] or 'None'}"
     )
 
-
-# =========================
-# Supabase REST
-# =========================
 
 def supabase_enabled():
     return bool(SUPABASE_URL and SUPABASE_SECRET_KEY)
@@ -259,6 +262,7 @@ async def save_stats():
     try:
         await asyncio.to_thread(supabase_save_stats)
         health["supabase_ok"] = True
+
     except Exception as exc:
         mark_error("supabase", exc)
 
@@ -274,13 +278,14 @@ async def event(name: str, user_id=None):
     await save_stats()
 
 
-# =========================
-# AI
-# =========================
-
 def clean_reply(text) -> str:
     text = text or ""
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(
+        r"<think>.*?</think>",
+        "",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
     return text.strip()
 
 
@@ -290,6 +295,7 @@ def text_ai(messages):
         messages=messages,
         temperature=0.4,
     )
+
     return clean_reply(response.choices[0].message.content)
 
 
@@ -300,42 +306,41 @@ def vision_ai(messages):
         temperature=0.3,
         max_tokens=1200,
     )
+
     return clean_reply(response.choices[0].message.content)
 
 
 def data_url(data: bytes) -> str:
-    return "data:image/jpeg;base64," + base64.b64encode(data).decode("utf-8")
+    encoded = base64.b64encode(data).decode("utf-8")
+    return "data:image/jpeg;base64," + encoded
 
-
-# =========================
-# Commands
-# =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Hey! I'm H15ai.\\n\\n"
-        "AI chat, study help, coding, ideas, image understanding and basic video understanding.\\n\\n"
+        "👋 Hey! I'm H15ai.\n\n"
+        "AI chat, study help, coding, ideas, image understanding "
+        "and basic video understanding.\n\n"
         "Use /help for commands."
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🧠 H15ai Commands\\n\\n"
-        "/start — Start\\n"
-        "/help — Help\\n"
-        "/clear — Clear your chat context\\n"
-        "/about — About H15ai\\n"
-        "/stats — Owner health + stats (owner only)\\n\\n"
+        "🧠 H15ai Commands\n\n"
+        "/start — Start\n"
+        "/help — Help\n"
+        "/clear — Clear your chat context\n"
+        "/about — About H15ai\n"
+        "/stats — Owner health + stats (owner only)\n\n"
         "You can also send normal messages, photos and videos."
     )
 
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🤖 H15ai\\n\\n"
-        "Created by Harsh Upadhyay as an AI learning project.\\n"
-        f"Creator: {OWNER_USERNAME}\\n\\n"
+        "🤖 H15ai\n\n"
+        "Created by Harsh Upadhyay as an AI learning project.\n"
+        f"Creator: {OWNER_USERNAME}\n\n"
         "Built with Telegram + Groq + Render + Supabase."
     )
 
@@ -352,10 +357,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(health_report())
 
-
-# =========================
-# Text
-# =========================
 
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -380,30 +381,31 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.chat.send_action(ChatAction.TYPING)
 
         answer = await asyncio.to_thread(text_ai, messages)
-        answer = answer or "Mujhe proper response nahi mila. Ek baar phir try kar 😭"
+        answer = answer or (
+            "Mujhe proper response nahi mila. Ek baar phir try kar 😭"
+        )
 
         history.append({"role": "assistant", "content": answer})
 
         await update.message.reply_text(answer)
         await event("total_replies")
+
         mark_success("text")
 
     except Exception as exc:
         mark_error("text", exc)
+
         await update.message.reply_text(
             "⚠️ AI side pe error aa gaya. Thodi der baad try kar."
         )
 
-
-# =========================
-# Photo
-# =========================
 
 async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.photo:
         return
 
     user_id = update.effective_user.id
+
     await event("total_messages", user_id)
     await event("total_photos")
 
@@ -412,9 +414,16 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         photo = update.message.photo[-1]
         tg_file = await context.bot.get_file(photo.file_id)
-        image_bytes = bytes(await tg_file.download_as_bytearray())
 
-        caption = update.message.caption or "Analyze this image and explain what you can see."
+        image_bytes = bytes(
+            await tg_file.download_as_bytearray()
+        )
+
+        caption = (
+            update.message.caption
+            or
+            "Analyze this image and explain what you can see."
+        )
 
         messages = [
             {"role": "system", "content": PERSONALITY},
@@ -422,38 +431,55 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": caption},
-                    {"type": "image_url", "image_url": {"url": data_url(image_bytes)}},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": data_url(image_bytes)
+                        },
+                    },
                 ],
             },
         ]
 
-        answer = await asyncio.to_thread(vision_ai, messages)
+        answer = await asyncio.to_thread(
+            vision_ai,
+            messages,
+        )
+
         answer = answer or "Image samajhne mein problem aa gayi."
 
         await update.message.reply_text(answer)
         await event("total_replies")
+
         mark_success("photo")
 
     except Exception as exc:
         mark_error("photo", exc)
-        await update.message.reply_text("⚠️ Photo analyze karte time error aa gaya.")
 
+        await update.message.reply_text(
+            "⚠️ Photo analyze karte time error aa gaya."
+        )
 
-# =========================
-# Video
-# =========================
 
 def extract_frames(video_path: str, output_dir: str, max_frames=6):
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-    pattern = os.path.join(output_dir, "frame_%02d.jpg")
+
+    pattern = os.path.join(
+        output_dir,
+        "frame_%02d.jpg",
+    )
 
     command = [
         ffmpeg,
         "-y",
-        "-i", video_path,
-        "-vf", "fps=1/2,scale=768:-1",
-        "-frames:v", str(max_frames),
-        "-q:v", "3",
+        "-i",
+        video_path,
+        "-vf",
+        "fps=1/2,scale=768:-1",
+        "-frames:v",
+        str(max_frames),
+        "-q:v",
+        "3",
         pattern,
     ]
 
@@ -466,9 +492,15 @@ def extract_frames(video_path: str, output_dir: str, max_frames=6):
     )
 
     frames = []
+
     for name in sorted(os.listdir(output_dir)):
         if name.endswith(".jpg"):
-            with open(os.path.join(output_dir, name), "rb") as f:
+            path = os.path.join(
+                output_dir,
+                name,
+            )
+
+            with open(path, "rb") as f:
                 frames.append(f.read())
 
     return frames
@@ -479,67 +511,105 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_id = update.effective_user.id
+
     await event("total_messages", user_id)
     await event("total_videos")
 
     try:
         await update.message.chat.send_action(ChatAction.TYPING)
 
-        tg_file = await context.bot.get_file(update.message.video.file_id)
+        tg_file = await context.bot.get_file(
+            update.message.video.file_id
+        )
 
         with tempfile.TemporaryDirectory() as temp:
-            video_path = os.path.join(temp, "input.mp4")
-            frames_dir = os.path.join(temp, "frames")
-            os.makedirs(frames_dir, exist_ok=True)
+            video_path = os.path.join(
+                temp,
+                "input.mp4",
+            )
 
-            await tg_file.download_to_drive(video_path)
+            frames_dir = os.path.join(
+                temp,
+                "frames",
+            )
+
+            os.makedirs(
+                frames_dir,
+                exist_ok=True,
+            )
+
+            await tg_file.download_to_drive(
+                video_path
+            )
 
             frames = await asyncio.to_thread(
-                extract_frames, video_path, frames_dir, 6
+                extract_frames,
+                video_path,
+                frames_dir,
+                6,
             )
 
             if not frames:
-                raise RuntimeError("No video frames could be extracted.")
+                raise RuntimeError(
+                    "No video frames could be extracted."
+                )
 
-            content = [{
-                "type": "text",
-                "text": (
-                    update.message.caption
-                    or
-                    "Analyze these sampled frames from the video. "
-                    "Explain what is happening. Do not claim to see "
-                    "parts that are not represented by the sampled frames."
-                ),
-            }]
-
-            for frame in frames:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": data_url(frame)},
-                })
-
-            messages = [
-                {"role": "system", "content": PERSONALITY},
-                {"role": "user", "content": content},
+            content = [
+                {
+                    "type": "text",
+                    "text": (
+                        update.message.caption
+                        or
+                        "Analyze these sampled frames from the video. "
+                        "Explain what is happening. Do not claim to see "
+                        "parts that are not represented by the sampled frames."
+                    ),
+                }
             ]
 
-            answer = await asyncio.to_thread(vision_ai, messages)
-            answer = answer or "Video samajhne mein proper response nahi mila."
+            for frame in frames:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": data_url(frame)
+                        },
+                    }
+                )
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": PERSONALITY,
+                },
+                {
+                    "role": "user",
+                    "content": content,
+                },
+            ]
+
+            answer = await asyncio.to_thread(
+                vision_ai,
+                messages,
+            )
+
+            answer = answer or (
+                "Video samajhne mein proper response nahi mila."
+            )
 
             await update.message.reply_text(answer)
             await event("total_replies")
+
             mark_success("video")
 
     except Exception as exc:
         mark_error("video", exc)
+
         await update.message.reply_text(
-            "⚠️ Video analyze karte time error aa gaya. Shorter/clearer video try karo."
+            "⚠️ Video analyze karte time error aa gaya. "
+            "Shorter/clearer video try karo."
         )
 
-
-# =========================
-# FastAPI / Render
-# =========================
 
 fastapi_app = FastAPI()
 telegram_app = None
@@ -547,7 +617,9 @@ telegram_app = None
 
 @fastapi_app.get("/")
 async def root():
-    return {"status": "H15ai is running"}
+    return {
+        "status": "H15ai is running"
+    }
 
 
 @fastapi_app.get("/health")
@@ -563,32 +635,72 @@ async def web_health():
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     if telegram_app is None:
-        return {"ok": False, "error": "Telegram application not initialized"}
+        return {
+            "ok": False,
+            "error": "Telegram application not initialized",
+        }
 
     data = await request.json()
-    update = Update.de_json(data, telegram_app.bot)
+
+    update = Update.de_json(
+        data,
+        telegram_app.bot,
+    )
+
     await telegram_app.process_update(update)
+
     return {"ok": True}
 
-
-# =========================
-# Main
-# =========================
 
 async def main():
     global telegram_app
 
-    telegram_app = Application.builder().token(BOT_TOKEN).build()
+    telegram_app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .build()
+    )
 
-    telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(CommandHandler("help", help_command))
-    telegram_app.add_handler(CommandHandler("about", about_command))
-    telegram_app.add_handler(CommandHandler("clear", clear_command))
-    telegram_app.add_handler(CommandHandler("stats", stats_command))
+    telegram_app.add_handler(
+        CommandHandler("start", start)
+    )
 
-    telegram_app.add_handler(MessageHandler(filters.PHOTO, photo_chat))
-    telegram_app.add_handler(MessageHandler(filters.VIDEO, video_chat))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+    telegram_app.add_handler(
+        CommandHandler("help", help_command)
+    )
+
+    telegram_app.add_handler(
+        CommandHandler("about", about_command)
+    )
+
+    telegram_app.add_handler(
+        CommandHandler("clear", clear_command)
+    )
+
+    telegram_app.add_handler(
+        CommandHandler("stats", stats_command)
+    )
+
+    telegram_app.add_handler(
+        MessageHandler(
+            filters.PHOTO,
+            photo_chat,
+        )
+    )
+
+    telegram_app.add_handler(
+        MessageHandler(
+            filters.VIDEO,
+            video_chat,
+        )
+    )
+
+    telegram_app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            chat,
+        )
+    )
 
     await telegram_app.initialize()
     await telegram_app.start()
@@ -600,7 +712,10 @@ async def main():
             url=f"{WEBHOOK_URL}/webhook",
             drop_pending_updates=True,
         )
-        print(f"Webhook set: {WEBHOOK_URL}/webhook")
+
+        print(
+            f"Webhook set: {WEBHOOK_URL}/webhook"
+        )
 
     config = uvicorn.Config(
         fastapi_app,
@@ -608,10 +723,12 @@ async def main():
         port=PORT,
         log_level="info",
     )
+
     server = uvicorn.Server(config)
 
     try:
         await server.serve()
+
     finally:
         try:
             await telegram_app.bot.delete_webhook()
@@ -624,16 +741,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-'''
-
-path = Path("/mnt/data/H15ai_bot_CLEAN.py")
-path.write_text(code, encoding="utf-8")
-
-# Syntax check before giving it to the user.
-compile(code, "bot.py", "exec")
-
-print(f"READY: {path}")
-print(f"Lines: {len(code.splitlines())}")
-print("Python syntax check: PASSED")
-print("No /mnt/data self-writing code is present.")
-
