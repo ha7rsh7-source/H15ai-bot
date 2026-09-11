@@ -1,7 +1,6 @@
 import os
 import asyncio
 import base64
-import subprocess
 import tempfile
 from datetime import datetime, timezone
 
@@ -15,13 +14,12 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
 from supabase import create_client
 
 
-# =========================
+# =========================================================
 # CONFIG
-# =========================
+# =========================================================
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -36,6 +34,11 @@ OWNER_USERNAME = "@Harshupadhyay_15"
 TEXT_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "qwen/qwen3.6-27b"
 
+
+# =========================================================
+# CLIENTS
+# =========================================================
+
 client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
@@ -44,7 +47,7 @@ client = OpenAI(
 
 supabase = create_client(
     SUPABASE_URL,
-    SUPABASE_SECRET_KEY
+    SUPABASE_SECRET_KEY,
 )
 
 app = FastAPI()
@@ -52,9 +55,9 @@ app = FastAPI()
 telegram_app = None
 
 
-# =========================
+# =========================================================
 # STATS
-# =========================
+# =========================================================
 
 stats = {
     "total_messages": 0,
@@ -123,41 +126,41 @@ def record_error(error):
     runtime_errors += 1
     last_error = str(error)
 
-    print("ERROR:", error)
+    print("ERROR:", repr(error))
 
 
 def record_success():
     global last_success
 
-    last_success = datetime.now(timezone.utc).strftime(
-        "%Y-%m-%d %H:%M:%S UTC"
-    )
+    last_success = datetime.now(
+        timezone.utc
+    ).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-# =========================
-# TELEGRAM MESSAGE SPLITTER
-# =========================
+# =========================================================
+# SAFE TELEGRAM MESSAGE SENDER
+# =========================================================
 
 async def send_long_message(update, text):
-    """
-    Telegram messages have a character limit.
-    Split long AI responses into safe chunks.
-    """
 
     if not text:
         return
 
-    # Safe limit below Telegram's maximum
+    # Telegram safe limit
     limit = 4000
 
     chunks = []
 
     while len(text) > limit:
+
+        # Prefer splitting at newline
         split_at = text.rfind("\n", 0, limit)
 
+        # Otherwise split at space
         if split_at < 1000:
             split_at = text.rfind(" ", 0, limit)
 
+        # If no good split exists
         if split_at < 1000:
             split_at = limit
 
@@ -176,9 +179,9 @@ async def send_long_message(update, text):
             record_error(e)
 
 
-# =========================
+# =========================================================
 # OWNER CHECK
-# =========================
+# =========================================================
 
 def is_owner(update):
 
@@ -188,9 +191,9 @@ def is_owner(update):
     return update.effective_user.id == OWNER_ID
 
 
-# =========================
+# =========================================================
 # SYSTEM PROMPT
-# =========================
+# =========================================================
 
 SYSTEM_PROMPT = """
 You are H15ai, Harsh's AI assistant.
@@ -198,29 +201,32 @@ You are H15ai, Harsh's AI assistant.
 Personality:
 - Friendly
 - Casual
-- Hinglish when appropriate
-- Talk like a helpful friend
-- Can use light memes/emojis naturally
-- Don't be unnecessarily formal
+- Natural Hinglish when appropriate
+- Helpful like a smart friend
+- Light humour/memes when suitable
+- Do not be unnecessarily formal
 
-Important:
+Accuracy:
 - Accuracy is more important than sounding confident.
-- For maths, physics, chemistry and other STEM questions, carefully verify calculations and reasoning before answering.
-- If unsure, clearly say so.
+- Carefully verify maths, physics, chemistry and STEM calculations.
 - Do not invent facts.
-- Give clear explanations.
-- Match the user's language.
+- If uncertain, say so clearly.
 - Keep simple questions concise.
-- For difficult questions, explain step-by-step.
+- Give detailed step-by-step explanations for difficult questions.
 
-You are NOT Harsh himself.
-You are H15ai, his AI bot.
+Safety:
+- Never provide instructions that help someone hurt another person.
+- For harmful requests, redirect toward safe alternatives.
+- Normal educational, sports, coding and everyday questions are fine.
+
+Identity:
+- You are H15ai, not Harsh himself.
 """
 
 
-# =========================
+# =========================================================
 # TEXT AI
-# =========================
+# =========================================================
 
 async def text_ai(user_text):
 
@@ -235,20 +241,22 @@ async def text_ai(user_text):
             {
                 "role": "user",
                 "content": user_text,
-            }
+            },
         ],
     )
 
     return response.choices[0].message.content
 
 
-# =========================
-# PHOTO AI
-# =========================
+# =========================================================
+# VISION AI
+# =========================================================
 
 async def vision_ai(image_bytes, prompt):
 
-    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    image_b64 = base64.b64encode(
+        image_bytes
+    ).decode("utf-8")
 
     response = await asyncio.to_thread(
         client.chat.completions.create,
@@ -268,7 +276,8 @@ async def vision_ai(image_bytes, prompt):
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_b64}"
+                            "url":
+                            f"data:image/jpeg;base64,{image_b64}"
                         },
                     },
                 ],
@@ -281,26 +290,28 @@ async def vision_ai(image_bytes, prompt):
     return response.choices[0].message.content
 
 
-# =========================
-# START
-# =========================
+# =========================================================
+# /START
+# =========================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     register_user(update.effective_user.id)
 
-    text = """
+    await update.message.reply_text(
+        """
 🧠 Welcome to H15ai!
 
 I'm Harsh's AI assistant 🤖
 
 You can:
+
 💬 Chat normally
 📚 Ask study questions
-🧮 Solve maths/physics/chemistry
+🧮 Solve maths / physics / chemistry
 🖼️ Send photos
 🎬 Send videos
-😂 Ask for jokes
+😂 Ask jokes
 💡 Get ideas/scripts
 💻 Get coding help
 
@@ -310,19 +321,21 @@ Commands:
 /help — Help
 /clear — Clear your chat context
 /about — About H15ai
-/stats — Owner health + stats
+/stats — Owner health + stats (owner only)
 
 Just send me anything 😎
 """
+    )
 
-    await update.message.reply_text(text)
 
+# =========================================================
+# /HELP
+# =========================================================
 
-# =========================
-# HELP
-# =========================
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     await update.message.reply_text(
         """
@@ -339,17 +352,20 @@ You can also send normal messages, photos and videos.
     )
 
 
-# =========================
-# ABOUT
-# =========================
+# =========================================================
+# /ABOUT
+# =========================================================
 
-async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def about(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     await update.message.reply_text(
         """
 🤖 H15ai
 
-Harsh's personal AI bot.
+Harsh's AI assistant.
 
 Powered by:
 🧠 Groq AI
@@ -357,16 +373,19 @@ Powered by:
 🗄️ Supabase
 ✈️ Telegram
 
-Built to be a friendly, useful AI assistant.
+Built to be a friendly and useful AI assistant.
 """
     )
 
 
-# =========================
-# CLEAR
-# =========================
+# =========================================================
+# /CLEAR
+# =========================================================
 
-async def clear_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def clear_context(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     context.user_data.clear()
 
@@ -375,11 +394,14 @@ async def clear_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
-# STATS
-# =========================
+# =========================================================
+# /STATS
+# =========================================================
 
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def stats_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     if not is_owner(update):
 
@@ -389,21 +411,29 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    text_status = "🟢 OK" if last_success else "🔴 ERROR"
+    text_status = (
+        "🟢 OK"
+        if last_success
+        else "🔴 ERROR"
+    )
 
     if photo_tested:
-        photo_status = "🟢 OK" if photo_ok else "🔴 ERROR"
+        photo_status = (
+            "🟢 OK"
+            if photo_ok
+            else "🔴 ERROR"
+        )
     else:
         photo_status = "🟡 Not tested"
 
     if video_tested:
-        video_status = "🟢 OK" if video_ok else "🔴 ERROR"
+        video_status = (
+            "🟢 OK"
+            if video_ok
+            else "🔴 ERROR"
+        )
     else:
         video_status = "🟡 Not tested"
-
-    supabase_status = "🟢 OK"
-
-    error_text = last_error if last_error else "None"
 
     report = f"""
 🩺 H15ai Health Report
@@ -411,7 +441,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🤖 Text AI: {text_status}
 🖼️ Photo AI: {photo_status}
 🎬 Video AI: {video_status}
-🗄️ Supabase: {supabase_status}
+🗄️ Supabase: 🟢 OK
 
 📊 Stats
 • Messages: {stats["total_messages"]}
@@ -426,32 +456,43 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {last_success or "None"}
 
 ❗ Last error:
-{error_text}
+{last_error or "None"}
 """
 
-    await send_long_message(update, report)
+    await send_long_message(
+        update,
+        report
+    )
 
 
-# =========================
+# =========================================================
 # TEXT HANDLER
-# =========================
+# =========================================================
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    global last_success
+async def handle_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     try:
 
-        register_user(update.effective_user.id)
+        register_user(
+            update.effective_user.id
+        )
 
         stats["total_messages"] += 1
         save_stats()
 
         user_text = update.message.text
 
-        reply = await text_ai(user_text)
+        reply = await text_ai(
+            user_text
+        )
 
-        await send_long_message(update, reply)
+        await send_long_message(
+            update,
+            reply
+        )
 
         stats["total_replies"] += 1
         save_stats()
@@ -463,15 +504,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         record_error(e)
 
         await update.message.reply_text(
-            "⚠️ AI side pe error aa gaya. Thodi der baad try kar."
+            "⚠️ AI side pe error aa gaya. "
+            "Thodi der baad try kar."
         )
 
 
-# =========================
+# =========================================================
 # PHOTO HANDLER
-# =========================
+# =========================================================
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     global photo_tested, photo_ok
 
@@ -479,7 +524,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
 
-        register_user(update.effective_user.id)
+        register_user(
+            update.effective_user.id
+        )
 
         stats["total_messages"] += 1
         stats["total_photos"] += 1
@@ -494,7 +541,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prompt = (
             update.message.caption
             or
-            "Analyze this image carefully. Explain what is visible and answer the user's likely question."
+            "Analyze this image carefully and explain what is visible. "
+            "If it contains a question, solve it."
         )
 
         reply = await vision_ai(
@@ -502,7 +550,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prompt
         )
 
-        await send_long_message(update, reply)
+        await send_long_message(
+            update,
+            reply
+        )
 
         stats["total_replies"] += 1
         save_stats()
@@ -513,6 +564,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
 
         photo_ok = False
+
         record_error(e)
 
         await update.message.reply_text(
@@ -520,11 +572,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# =========================
+# =========================================================
 # VIDEO HANDLER
-# =========================
+# =========================================================
 
-async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     global video_tested, video_ok
 
@@ -532,7 +587,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
 
-        register_user(update.effective_user.id)
+        register_user(
+            update.effective_user.id
+        )
 
         stats["total_messages"] += 1
         stats["total_videos"] += 1
@@ -549,7 +606,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "video.mp4"
             )
 
-            await file.download_to_drive(video_path)
+            await file.download_to_drive(
+                video_path
+            )
 
             output_pattern = os.path.join(
                 temp_dir,
@@ -570,15 +629,17 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 output_pattern,
             ]
 
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            process = (
+                await asyncio.create_subprocess_exec(
+                    *command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
             )
 
             try:
 
-                stdout, stderr = await asyncio.wait_for(
+                await asyncio.wait_for(
                     process.communicate(),
                     timeout=120
                 )
@@ -588,11 +649,15 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 process.kill()
                 await process.wait()
 
-                raise Exception("Video processing timed out")
+                raise Exception(
+                    "Video processing timed out"
+                )
 
             frames = []
 
-            for filename in sorted(os.listdir(temp_dir)):
+            for filename in sorted(
+                os.listdir(temp_dir)
+            ):
 
                 if filename.endswith(".jpg"):
 
@@ -601,13 +666,34 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         filename
                     )
 
-                    with open(frame_path, "rb") as f:
-                        frames.append(f.read())
+                    with open(
+                        frame_path,
+                        "rb"
+                    ) as f:
+
+                        frames.append(
+                            f.read()
+                        )
 
             if not frames:
-                raise Exception("No video frames extracted")
+                raise Exception(
+                    "No video frames extracted"
+                )
 
-            combined = []
+            content = []
+
+            prompt = (
+                update.message.caption
+                or
+                "Analyze this video using the provided frames. "
+                "Explain what is happening chronologically. "
+                "Mention uncertainty if the sampled frames are insufficient."
+            )
+
+            content.append({
+                "type": "text",
+                "text": prompt
+            })
 
             for frame in frames:
 
@@ -615,26 +701,13 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     frame
                 ).decode("utf-8")
 
-                combined.append({
+                content.append({
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{encoded}"
-                    }
+                        "url":
+                        f"data:image/jpeg;base64,{encoded}"
+                    },
                 })
-
-            prompt = (
-                update.message.caption
-                or
-                "Analyze this video using the provided frames. Explain what is happening in the video in chronological order. Mention uncertainty if the sampled frames are insufficient."
-            )
-
-            combined.insert(
-                0,
-                {
-                    "type": "text",
-                    "text": prompt
-                }
-            )
 
             response = await asyncio.to_thread(
                 client.chat.completions.create,
@@ -646,16 +719,22 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     },
                     {
                         "role": "user",
-                        "content": combined,
-                    }
+                        "content": content,
+                    },
                 ],
                 max_tokens=950,
                 reasoning_effort="none",
             )
 
-            reply = response.choices[0].message.content
+            reply = (
+                response.choices[0]
+                .message.content
+            )
 
-            await send_long_message(update, reply)
+            await send_long_message(
+                update,
+                reply
+            )
 
         stats["total_replies"] += 1
         save_stats()
@@ -666,6 +745,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
 
         video_ok = False
+
         record_error(e)
 
         await update.message.reply_text(
@@ -673,25 +753,24 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# =========================
-# ERROR HANDLER
-# =========================
+# =========================================================
+# TELEGRAM ERROR HANDLER
+# =========================================================
 
-async def error_handler(update, context):
+async def error_handler(
+    update,
+    context
+):
 
-    error = context.error
-
-    record_error(error)
-
-    print(
-        "Telegram error:",
-        repr(error)
-    )
+    if context.error:
+        record_error(
+            context.error
+        )
 
 
-# =========================
-# FASTAPI
-# =========================
+# =========================================================
+# FASTAPI WEBHOOK
+# =========================================================
 
 @app.get("/")
 async def home():
@@ -703,7 +782,9 @@ async def home():
 
 
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(
+    request: Request
+):
 
     data = await request.json()
 
@@ -712,18 +793,21 @@ async def webhook(request: Request):
         telegram_app.bot
     )
 
-    await telegram_app.process_update(update)
+    await telegram_app.process_update(
+        update
+    )
 
     return {
         "ok": True
     }
 
 
-# =========================
-# MAIN
-# =========================
+# =========================================================
+# START TELEGRAM INSIDE FASTAPI
+# =========================================================
 
-async def main():
+@app.on_event("startup")
+async def startup():
 
     global telegram_app
 
@@ -736,23 +820,38 @@ async def main():
     )
 
     telegram_app.add_handler(
-        CommandHandler("start", start)
+        CommandHandler(
+            "start",
+            start
+        )
     )
 
     telegram_app.add_handler(
-        CommandHandler("help", help_command)
+        CommandHandler(
+            "help",
+            help_command
+        )
     )
 
     telegram_app.add_handler(
-        CommandHandler("about", about)
+        CommandHandler(
+            "about",
+            about
+        )
     )
 
     telegram_app.add_handler(
-        CommandHandler("clear", clear_context)
+        CommandHandler(
+            "clear",
+            clear_context
+        )
     )
 
     telegram_app.add_handler(
-        CommandHandler("stats", stats_command)
+        CommandHandler(
+            "stats",
+            stats_command
+        )
     )
 
     telegram_app.add_handler(
@@ -781,6 +880,7 @@ async def main():
     )
 
     await telegram_app.initialize()
+
     await telegram_app.start()
 
     webhook_url = (
@@ -793,12 +893,46 @@ async def main():
     )
 
     print(
-        "H15ai running:",
+        "H15ai webhook running:",
         webhook_url
     )
 
-    await asyncio.Event().wait()
 
+# =========================================================
+# SHUTDOWN
+# =========================================================
+
+@app.on_event("shutdown")
+async def shutdown():
+
+    global telegram_app
+
+    if telegram_app:
+
+        await telegram_app.bot.delete_webhook()
+
+        await telegram_app.stop()
+
+        await telegram_app.shutdown()
+
+
+# =========================================================
+# RENDER START
+# =========================================================
 
 if __name__ == "__main__":
-    asyncio.run(main())
+
+    import uvicorn
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            "10000"
+        )
+    )
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port
+    )
