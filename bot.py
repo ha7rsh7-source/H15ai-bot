@@ -34,7 +34,7 @@ SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "")
 client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
-    timeout=120.0,
+    timeout=180.0,
 )
 
 
@@ -216,7 +216,6 @@ def supabase_save_stats():
     import urllib.request
 
     url = f"{SUPABASE_URL}/rest/v1/bot_stats?id=eq.1"
-
     payload = json.dumps(stats).encode("utf-8")
 
     req = urllib.request.Request(
@@ -280,12 +279,14 @@ async def event(name: str, user_id=None):
 
 def clean_reply(text) -> str:
     text = text or ""
+
     text = re.sub(
         r"<think>.*?</think>",
         "",
         text,
         flags=re.DOTALL | re.IGNORECASE,
     )
+
     return text.strip()
 
 
@@ -304,7 +305,7 @@ def vision_ai(messages):
         model=VISION_MODEL,
         messages=messages,
         temperature=0.3,
-        max_tokens=1200,
+        max_tokens=950,
     )
 
     return clean_reply(response.choices[0].message.content)
@@ -372,20 +373,36 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await event("total_messages", user_id)
 
     history = histories[user_id]
-    history.append({"role": "user", "content": text})
+    history.append({
+        "role": "user",
+        "content": text,
+    })
 
-    messages = [{"role": "system", "content": PERSONALITY}]
+    messages = [
+        {
+            "role": "system",
+            "content": PERSONALITY,
+        }
+    ]
+
     messages.extend(history)
 
     try:
         await update.message.chat.send_action(ChatAction.TYPING)
 
-        answer = await asyncio.to_thread(text_ai, messages)
+        answer = await asyncio.to_thread(
+            text_ai,
+            messages,
+        )
+
         answer = answer or (
             "Mujhe proper response nahi mila. Ek baar phir try kar 😭"
         )
 
-        history.append({"role": "assistant", "content": answer})
+        history.append({
+            "role": "assistant",
+            "content": answer,
+        })
 
         await update.message.reply_text(answer)
         await event("total_replies")
@@ -413,7 +430,10 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.chat.send_action(ChatAction.TYPING)
 
         photo = update.message.photo[-1]
-        tg_file = await context.bot.get_file(photo.file_id)
+
+        tg_file = await context.bot.get_file(
+            photo.file_id
+        )
 
         image_bytes = bytes(
             await tg_file.download_as_bytearray()
@@ -426,11 +446,17 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         messages = [
-            {"role": "system", "content": PERSONALITY},
+            {
+                "role": "system",
+                "content": PERSONALITY,
+            },
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": caption},
+                    {
+                        "type": "text",
+                        "text": caption,
+                    },
                     {
                         "type": "image_url",
                         "image_url": {
@@ -446,7 +472,9 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             messages,
         )
 
-        answer = answer or "Image samajhne mein problem aa gayi."
+        answer = answer or (
+            "Image samajhne mein problem aa gayi."
+        )
 
         await update.message.reply_text(answer)
         await event("total_replies")
@@ -461,7 +489,11 @@ async def photo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-def extract_frames(video_path: str, output_dir: str, max_frames=6):
+def extract_frames(
+    video_path: str,
+    output_dir: str,
+    max_frames=4,
+):
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
     pattern = os.path.join(
@@ -475,11 +507,11 @@ def extract_frames(video_path: str, output_dir: str, max_frames=6):
         "-i",
         video_path,
         "-vf",
-        "fps=1/2,scale=768:-1",
+        "fps=1/2,scale=512:-1",
         "-frames:v",
         str(max_frames),
         "-q:v",
-        "3",
+        "4",
         pattern,
     ]
 
@@ -546,7 +578,7 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 extract_frames,
                 video_path,
                 frames_dir,
-                6,
+                4,
             )
 
             if not frames:
@@ -572,7 +604,7 @@ async def video_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": data_url(frame)
+                            "url": data_url(frame),
                         },
                     }
                 )
@@ -649,7 +681,9 @@ async def webhook(request: Request):
 
     await telegram_app.process_update(update)
 
-    return {"ok": True}
+    return {
+        "ok": True
+    }
 
 
 async def main():
