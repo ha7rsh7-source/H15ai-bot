@@ -719,14 +719,14 @@ def _convert_scripts(text: str) -> str:
 
 def clean_reply(text: str) -> str:
     """
-    Convert model output into clean Telegram-safe plain text.
+    Clean model output for Telegram.
 
     Important:
-    - Never leave raw LaTeX.
-    - Never destroy fractions such as 1/2.
-    - Convert LaTeX fractions to readable Unicode/plain text.
-    - Convert multiplication dots to ×.
-    - Preserve normal Markdown and line breaks.
+    - Preserve normal slash fractions such as 3/x and 9/x².
+    - Never turn 3/x into 3x.
+    - Never turn 1/2 into 12.
+    - Convert actual LaTeX fractions to readable Unicode/plain text.
+    - Remove raw LaTeX commands.
     """
 
     if not text:
@@ -735,9 +735,7 @@ def clean_reply(text: str) -> str:
             "Ek baar dobara try kar."
         )
 
-    # --------------------------------------------------------
-    # 1. Remove accidental speaker prefixes
-    # --------------------------------------------------------
+    # Speaker prefix
     text = re.sub(
         r"^\s*(assistant|h15ai)\s*:\s*",
         "",
@@ -745,18 +743,14 @@ def clean_reply(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # --------------------------------------------------------
-    # 2. Remove LaTeX delimiters only
-    # --------------------------------------------------------
+    # Math delimiters
     text = text.replace(r"\(", "").replace(r"\)", "")
     text = text.replace(r"\[", "").replace(r"\]", "")
     text = text.replace("$$", "")
     text = text.replace("$", "")
 
-    # --------------------------------------------------------
-    # 3. Remove LaTeX spacing commands
-    # --------------------------------------------------------
-    spacing_patterns = [
+    # LaTeX spacing commands only.
+    for pattern in (
         r"\\quad",
         r"\\qquad",
         r"\\enspace",
@@ -766,24 +760,18 @@ def clean_reply(text: str) -> str:
         r"\\:",
         r"\\>",
         r"\\ ",
-    ]
-
-    for pattern in spacing_patterns:
+    ):
         text = re.sub(pattern, " ", text)
 
     text = _strip_left_right(text)
 
-    # --------------------------------------------------------
-    # 4. Fractions and square roots
-    # --------------------------------------------------------
+    # Convert real LaTeX fractions BEFORE removing commands.
     text = _convert_frac(text)
     text = _convert_sqrt(text)
 
-    # Convert simple LaTeX half to the actual Unicode fraction.
-    text = text.replace("1 ÷ 2", "½")
-
-    # Other common simple fractions.
-    simple_fractions = {
+    # Simple Unicode fractions.
+    for old, new in {
+        "1 ÷ 2": "½",
         "1 ÷ 4": "¼",
         "3 ÷ 4": "¾",
         "1 ÷ 3": "⅓",
@@ -792,14 +780,10 @@ def clean_reply(text: str) -> str:
         "2 ÷ 5": "⅖",
         "3 ÷ 5": "⅗",
         "4 ÷ 5": "⅘",
-    }
-
-    for old, new in simple_fractions.items():
+    }.items():
         text = text.replace(old, new)
 
-    # --------------------------------------------------------
-    # 5. Remove common wrapper commands but KEEP their content
-    # --------------------------------------------------------
+    # Wrapper commands: preserve their contents.
     for command in (
         r"\boxed",
         r"\text",
@@ -812,16 +796,12 @@ def clean_reply(text: str) -> str:
     ):
         text = _strip_wrapping_command(text, command)
 
-    # --------------------------------------------------------
-    # 6. Convert superscripts / subscripts
-    # --------------------------------------------------------
+    # Empty scripts and normal scripts.
     text = re.sub(r"\^\{\s*\}", "", text)
     text = re.sub(r"_\{\s*\}", "", text)
     text = _convert_scripts(text)
 
-    # --------------------------------------------------------
-    # 7. Common LaTeX symbols
-    # --------------------------------------------------------
+    # Common symbols.
     replacements = {
         r"\times": "×",
         r"\cdot": "×",
@@ -855,50 +835,44 @@ def clean_reply(text: str) -> str:
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # AI sometimes uses a middle dot even without LaTeX.
+    # Middle dot -> multiplication sign.
     text = text.replace("·", "×")
 
-    # --------------------------------------------------------
-    # 8. Remove remaining LaTeX command names
-    # --------------------------------------------------------
+    # Remove remaining LaTeX command names.
     text = re.sub(r"\\[a-zA-Z]+", "", text)
 
-    # Remove stray backslashes but do NOT touch normal slash fractions.
+    # Remove leftover backslashes ONLY.
+    # IMPORTANT: do NOT touch "/" because slash fractions are valid.
     text = text.replace("\\", "")
 
-    # --------------------------------------------------------
-    # 9. Braces and code fences
-    # --------------------------------------------------------
+    # Remove code fences and leftover LaTeX braces.
     text = text.replace("```text", "")
     text = text.replace("```", "")
-
-    # Only remove braces left by LaTeX.
     text = text.replace("{", "").replace("}", "")
 
-    # --------------------------------------------------------
-    # 10. Fix common fraction corruption
-    # --------------------------------------------------------
-    # IMPORTANT: Do not globally convert a/b to a ÷ b.
-    # Slash notation is often useful and should remain readable.
+    # --------------------------------------------------------------
+    # Fraction safety
+    # --------------------------------------------------------------
+    # If the model writes a normal fraction using "/", PRESERVE it.
     #
-    # Fix cases where the model writes "12 × ..." intending "½ × ...".
-    # This specifically targets the common cleaner failure:
-    #     12 a t²
-    #     12 × 2 × 10²
+    # Examples that MUST remain readable:
+    #   3/x
+    #   9/x²
+    #   1/2
+    #   (u + v)/2
     #
-    # We do NOT blindly replace every "12", because that could corrupt
-    # legitimate numbers. The prompt below prevents this at generation time.
+    # Never globally replace "/" with "÷".
+    # Never remove "/" during whitespace cleanup.
 
-    # --------------------------------------------------------
-    # 11. Normalize whitespace
-    # --------------------------------------------------------
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    # Normalize accidental spaces around slash.
+    text = re.sub(r"\s*/\s*", "/", text)
 
-    # Clean spaces around multiplication while preserving readability.
+    # Remove spaces around multiplication, but keep line structure.
     text = re.sub(r"\s*×\s*", " × ", text)
 
-    # Avoid ugly double spaces introduced around punctuation.
+    # Clean repeated spaces without touching slash fractions.
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r" +([,.;:])", r"\1", text)
 
     text = text.strip()
@@ -2148,3 +2122,4 @@ if __name__ == "__main__":
     asyncio.run(
         run_bot()
     )
+    
