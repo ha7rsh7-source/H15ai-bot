@@ -479,6 +479,13 @@ Final Answer
 - Detailed solution -> complete working.
 - If the user provides notes or a particular method,
   follow their terminology and level where possible.
+- When repeating any equation, Given value, To Find expression, or Final Answer
+  from the user's question, COPY the mathematical expression exactly.
+- Never simplify, rewrite, or reformat a fraction when copying it.
+- If the user writes 3/x, every repeated version must remain 3/x, never 3x.
+- If the user writes 9/x², every repeated version must remain 9/x², never 9x².
+- Before sending, compare repeated equations with the original user question and
+  fix any dropped fraction slash, exponent, sign, coefficient, or variable.
 
 ==================================================
 11. IMAGE QUESTIONS
@@ -694,7 +701,31 @@ def _convert_scripts(text: str) -> str:
     return text
 
 
-def clean_reply(text: str) -> str:
+def _restore_source_fractions(answer: str, source_text: str) -> str:
+    """Restore slash fractions the model accidentally drops while repeating the question."""
+    if not answer or not source_text:
+        return answer
+
+    # Conservative patterns such as 3/x, 9/x², 12/y.
+    fractions = re.findall(
+        r"(?<![\w])([0-9]+/[A-Za-z][A-Za-z0-9⁰¹²³⁴⁵⁶⁷⁸⁹]*)(?![\w])",
+        source_text,
+    )
+
+    lines = answer.splitlines()
+    for frac in fractions:
+        numerator, denominator = frac.split("/", 1)
+        malformed = numerator + denominator
+        pattern = rf"(?<![\w/]){re.escape(malformed)}(?![\w])"
+
+        for i, line in enumerate(lines):
+            if frac not in line and re.search(pattern, line):
+                lines[i] = re.sub(pattern, frac, line)
+
+    return "\n".join(lines)
+
+
+def clean_reply(text: str, source_text: str = "") -> str:
     if not text:
         return "Yaar 😭 AI ne empty reply de diya. Ek baar dobara try kar."
 
@@ -736,6 +767,10 @@ def clean_reply(text: str) -> str:
     text = re.sub(r"\\[a-zA-Z]+", "", text)
     text = text.replace("\\", "")
     text = text.replace("{", "").replace("}", "")
+
+    # Semantic safety net: compare repeated equations against the original question.
+    text = _restore_source_fractions(text, source_text)
+
     text = re.sub(r"\s*×\s*", " × ", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -1327,7 +1362,8 @@ async def chat(
             response
             .choices[0]
             .message
-            .content
+            .content,
+            source_text=user_text,
         )
 
         history.append(
@@ -1465,7 +1501,8 @@ async def photo_chat(
             response
             .choices[0]
             .message
-            .content
+            .content,
+            source_text=user_text,
         )
 
         history.append(
@@ -1728,7 +1765,8 @@ async def video_chat(
             response
             .choices[0]
             .message
-            .content
+            .content,
+            source_text=user_text,
         )
 
         history.append(
