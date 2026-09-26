@@ -512,6 +512,129 @@ def is_owner(update: Update) -> bool:
     return username == OWNER_USERNAME.lower()
 
 
+# ------------------------------------------------------------
+# LaTeX-to-plain-text cleanup (nested-brace-safe)
+# ------------------------------------------------------------
+
+def _find_matching_brace(text: str, open_index: int) -> int:
+    """text[open_index] must be '{'. Returns index of the matching '}'."""
+    depth = 0
+    for i in range(open_index, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1  # unmatched -> caller treats rest of string as content
+
+
+def _extract_braced(text: str, open_index: int):
+    """text[open_index] must be '{'. Returns (content, index_after_closing_brace)."""
+    close_index = _find_matching_brace(text, open_index)
+    if close_index == -1:
+        return text[open_index + 1:], len(text)
+    return text[open_index + 1:close_index], close_index + 1
+
+
+def _strip_left_right(text: str) -> str:
+    # \left( -> ( , \right] -> ] , \left\{ -> { , etc.
+    text = re.sub(r"\\left\s*", "", text)
+    text = re.sub(r"\\right\s*", "", text)
+    return text
+
+
+def _convert_frac(text: str) -> str:
+    """\\frac{A}{B} (nested braces allowed) -> 'A ÷ B', no parentheses added."""
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i:i + 5] == r"\frac":
+            j = i + 5
+            while j < len(text) and text[j] == " ":
+                j += 1
+            if j < len(text) and text[j] == "{":
+                numerator, j = _extract_braced(text, j)
+                while j < len(text) and text[j] == " ":
+                    j += 1
+                if j < len(text) and text[j] == "{":
+                    denominator, j = _extract_braced(text, j)
+                    numerator = _convert_frac(numerator)
+                    denominator = _convert_frac(denominator)
+                    result.append(f"{numerator} ÷ {denominator}")
+                    i = j
+                    continue
+        result.append(text[i])
+        i += 1
+    return "".join(result)
+
+
+def _convert_sqrt(text: str) -> str:
+    """\\sqrt{A} -> '√A'."""
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i:i + 5] == r"\sqrt":
+            j = i + 5
+            while j < len(text) and text[j] == " ":
+                j += 1
+            if j < len(text) and text[j] == "{":
+                content, j = _extract_braced(text, j)
+                content = _convert_sqrt(content)
+                content = _convert_frac(content)
+                result.append(f"√{content}")
+                i = j
+                continue
+        result.append(text[i])
+        i += 1
+    return "".join(result)
+
+
+def _strip_wrapping_command(text: str, command: str) -> str:
+    """Replace \\command{A} with just A (recursively cleaned). Handles nesting."""
+    result = []
+    i = 0
+    cmd_len = len(command)
+    while i < len(text):
+        if text[i:i + cmd_len] == command:
+            j = i + cmd_len
+            while j < len(text) and text[j] == " ":
+                j += 1
+            if j < len(text) and text[j] == "{":
+                content, j = _extract_braced(text, j)
+                content = _strip_wrapping_command(content, command)
+                result.append(content)
+                i = j
+                continue
+        result.append(text[i])
+        i += 1
+    return "".join(result)
+
+
+_SUPERSCRIPT_MAP = str.maketrans("0123456789n", "⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ")
+_SUBSCRIPT_MAP = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+
+def _convert_scripts(text: str) -> str:
+    """x^{2} / x^2 -> x² , x_{1} / x_1 -> x₁ (drops the marker for anything else)."""
+
+    def repl_super(match):
+        content = match.group(1) or match.group(2)
+        if re.fullmatch(r"[0-9n]+", content):
+            return content.translate(_SUPERSCRIPT_MAP)
+        return content
+
+    def repl_sub(match):
+        content = match.group(1) or match.group(2)
+        if re.fullmatch(r"[0-9]+", content):
+            return content.translate(_SUBSCRIPT_MAP)
+        return content
+
+    text = re.sub(r"\^\{([^{}]*)\}|\^([A-Za-z0-9])", repl_super, text)
+    text = re.sub(r"_\{([^{}]*)\}|_([A-Za-z0-9])", repl_sub, text)
+    return text
+
+
 def clean_reply(text: str) -> str:
 
     if not text:
@@ -527,58 +650,36 @@ def clean_reply(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Remove accidental markdown-style LaTeX delimiters.
-    text = text.replace(r"\(", "")
-    text = text.replace(r"\)", "")
-    text = text.replace(r"\[", "")
-    text = text.replace(r"\]", "")
+    # Plain delimiters first
+    text = text.replace(r"\(", "").replace(r"\)", "")
+    text = text.replace(r"\[", "").replace(r"\]", "")
+    text = text.replace("$$", "").replace("$", "")
 
-    # Remove dollar-style math delimiters.
-    text = text.replace("$$", "")
-    text = text.replace("$", "")
+    # \left( \right) etc -> just the delimiter char
+    text = _strip_left_right(text)
 
-    # Remove common raw LaTeX commands while preserving their content
-    # where possible.
-    text = re.sub(
-        r"\\boxed\{([^{}]*)\}",
-        r"\1",
-        text,
-    )
+    # Nested-aware conversions (order matters: frac/sqrt before wrapping commands)
+    text = _convert_frac(text)
+    text = _convert_sqrt(text)
 
-    text = re.sub(
-        r"\\text\{([^{}]*)\}",
-        r"\1",
-        text,
-    )
+    for command in (r"\boxed", r"\text", r"\mathrm", r"\mathbf", r"\operatorname", r"\displaystyle"):
+        text = _strip_wrapping_command(text, command)
 
-    text = re.sub(
-        r"\\mathrm\{([^{}]*)\}",
-        r"\1",
-        text,
-    )
+    # Superscripts / subscripts
+    text = _convert_scripts(text)
 
-    # Convert common LaTeX fractions into readable text.
-    def fraction_replace(match):
+    # Remove empty script markers such as h_{} or x^{}
+    text = re.sub(r"_\{\s*\}", "", text)
+    text = re.sub(r"\^\{\s*\}", "", text)
 
-        numerator = match.group(1)
-        denominator = match.group(2)
+    # Remove common LaTeX spacing commands
+    text = re.sub(r"\\(?:,|;|:|!|quad|qquad|enspace|thinspace|medspace|thickspace)\s*", " ", text)
 
-        return (
-            f"({numerator}) ÷ ({denominator})"
-        )
-
-    text = re.sub(
-        r"\\frac\{([^{}]*)\}\{([^{}]*)\}",
-        fraction_replace,
-        text,
-    )
-
-    # Common LaTeX symbols.
+    # Common LaTeX symbols
     replacements = {
         r"\times": "×",
         r"\cdot": "×",
         r"\div": "÷",
-        r"\sqrt": "√",
         r"\pi": "π",
         r"\Delta": "Δ",
         r"\theta": "θ",
@@ -595,17 +696,17 @@ def clean_reply(text: str) -> str:
     }
 
     for old, new in replacements.items():
-        text = text.replace(
-            old,
-            new,
-        )
+        text = text.replace(old, new)
 
-    # Remove remaining obvious LaTeX commands.
-    text = re.sub(
-        r"\\[a-zA-Z]+\s*",
-        "",
-        text,
-    )
+    # Any remaining LaTeX command word (backslash + letters), whatever's left
+    text = re.sub(r"\\[a-zA-Z]+", "", text)
+
+    # Safety net: strip any stray braces that never got matched to a command
+    text = text.replace("{", "").replace("}", "")
+
+    # Tidy up whitespace created by all the removals
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     text = text.strip()
 
