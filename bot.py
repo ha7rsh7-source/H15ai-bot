@@ -238,6 +238,88 @@ v = u + at
 where u = 0
 
 ==================================================
+6.5 FRACTIONS — VERY IMPORTANT
+==================================================
+
+Never write a fraction in a way that can be mistaken for a normal
+two-digit number.
+
+For example, NEVER write:
+
+12 × 2 × 10²
+
+when you mean:
+
+½ × 2 × 10²
+
+Always write the half symbol:
+
+½
+
+So the correct expression is:
+
+s = ut + ½at²
+
+Similarly:
+
+vavg = (u + v) ÷ 2
+
+NOT:
+
+vavg = u + v2
+
+For simple fractions, prefer:
+
+½
+¼
+¾
+⅓
+⅔
+
+For other fractions, use:
+
+numerator ÷ denominator
+
+Example:
+
+3 ÷ 5
+
+Do NOT remove the division meaning.
+
+For expressions such as:
+
+1/x
+
+write:
+
+1 ÷ x
+
+For:
+
+1/x²
+
+write:
+
+1 ÷ x²
+
+For:
+
+x + 1/x
+
+write:
+
+x + 1 ÷ x
+
+Use parentheses when needed to avoid ambiguity:
+
+(x + 1) ÷ 2
+
+NOT:
+
+x + 12
+
+==================================================
+==================================================
 6. SOLUTION PRESENTATION
 ==================================================
 
@@ -636,7 +718,16 @@ def _convert_scripts(text: str) -> str:
 
 
 def clean_reply(text: str) -> str:
-    """Convert model output into clean Telegram-safe plain text."""
+    """
+    Convert model output into clean Telegram-safe plain text.
+
+    Important:
+    - Never leave raw LaTeX.
+    - Never destroy fractions such as 1/2.
+    - Convert LaTeX fractions to readable Unicode/plain text.
+    - Convert multiplication dots to ×.
+    - Preserve normal Markdown and line breaks.
+    """
 
     if not text:
         return (
@@ -644,6 +735,9 @@ def clean_reply(text: str) -> str:
             "Ek baar dobara try kar."
         )
 
+    # --------------------------------------------------------
+    # 1. Remove accidental speaker prefixes
+    # --------------------------------------------------------
     text = re.sub(
         r"^\s*(assistant|h15ai)\s*:\s*",
         "",
@@ -651,24 +745,61 @@ def clean_reply(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Remove LaTeX delimiters.
+    # --------------------------------------------------------
+    # 2. Remove LaTeX delimiters only
+    # --------------------------------------------------------
     text = text.replace(r"\(", "").replace(r"\)", "")
     text = text.replace(r"\[", "").replace(r"\]", "")
-    text = text.replace("$$", "").replace("$", "")
+    text = text.replace("$$", "")
+    text = text.replace("$", "")
 
-    # Remove LaTeX spacing commands such as \;, \,, \quad, etc.
-    text = re.sub(
-        r"\\(?:[,;!:]|quad|qquad|enspace|hspace\*?)(?:\{[^{}]*\})?",
-        "",
-        text,
-    )
+    # --------------------------------------------------------
+    # 3. Remove LaTeX spacing commands
+    # --------------------------------------------------------
+    spacing_patterns = [
+        r"\\quad",
+        r"\\qquad",
+        r"\\enspace",
+        r"\\;",
+        r"\\,",
+        r"\\!",
+        r"\\:",
+        r"\\>",
+        r"\\ ",
+    ]
+
+    for pattern in spacing_patterns:
+        text = re.sub(pattern, " ", text)
 
     text = _strip_left_right(text)
 
-    # Convert fractions and square roots before removing wrapper commands.
+    # --------------------------------------------------------
+    # 4. Fractions and square roots
+    # --------------------------------------------------------
     text = _convert_frac(text)
     text = _convert_sqrt(text)
 
+    # Convert simple LaTeX half to the actual Unicode fraction.
+    text = text.replace("1 ÷ 2", "½")
+
+    # Other common simple fractions.
+    simple_fractions = {
+        "1 ÷ 4": "¼",
+        "3 ÷ 4": "¾",
+        "1 ÷ 3": "⅓",
+        "2 ÷ 3": "⅔",
+        "1 ÷ 5": "⅕",
+        "2 ÷ 5": "⅖",
+        "3 ÷ 5": "⅗",
+        "4 ÷ 5": "⅘",
+    }
+
+    for old, new in simple_fractions.items():
+        text = text.replace(old, new)
+
+    # --------------------------------------------------------
+    # 5. Remove common wrapper commands but KEEP their content
+    # --------------------------------------------------------
     for command in (
         r"\boxed",
         r"\text",
@@ -681,14 +812,16 @@ def clean_reply(text: str) -> str:
     ):
         text = _strip_wrapping_command(text, command)
 
-    # Remove empty superscript/subscript markers.
+    # --------------------------------------------------------
+    # 6. Convert superscripts / subscripts
+    # --------------------------------------------------------
     text = re.sub(r"\^\{\s*\}", "", text)
     text = re.sub(r"_\{\s*\}", "", text)
-
-    # Convert x², x₁, etc.
     text = _convert_scripts(text)
 
-    # Common LaTeX symbols.
+    # --------------------------------------------------------
+    # 7. Common LaTeX symbols
+    # --------------------------------------------------------
     replacements = {
         r"\times": "×",
         r"\cdot": "×",
@@ -722,25 +855,51 @@ def clean_reply(text: str) -> str:
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Telegram-readable multiplication.
+    # AI sometimes uses a middle dot even without LaTeX.
     text = text.replace("·", "×")
 
-    # Remove any remaining LaTeX command names.
+    # --------------------------------------------------------
+    # 8. Remove remaining LaTeX command names
+    # --------------------------------------------------------
     text = re.sub(r"\\[a-zA-Z]+", "", text)
 
-    # Remove leftover LaTeX spacing escapes.
-    for spacing in (r"\,", r"\;", r"\!", r"\:", r"\ ", r"\quad", r"\qquad"):
-        text = text.replace(spacing, " ")
+    # Remove stray backslashes but do NOT touch normal slash fractions.
+    text = text.replace("\\", "")
 
-    # Safety net for unmatched braces.
+    # --------------------------------------------------------
+    # 9. Braces and code fences
+    # --------------------------------------------------------
+    text = text.replace("```text", "")
+    text = text.replace("```", "")
+
+    # Only remove braces left by LaTeX.
     text = text.replace("{", "").replace("}", "")
 
-    # Do not leave academic answers inside code fences.
-    text = text.replace("```text", "").replace("```", "")
+    # --------------------------------------------------------
+    # 10. Fix common fraction corruption
+    # --------------------------------------------------------
+    # IMPORTANT: Do not globally convert a/b to a ÷ b.
+    # Slash notation is often useful and should remain readable.
+    #
+    # Fix cases where the model writes "12 × ..." intending "½ × ...".
+    # This specifically targets the common cleaner failure:
+    #     12 a t²
+    #     12 × 2 × 10²
+    #
+    # We do NOT blindly replace every "12", because that could corrupt
+    # legitimate numbers. The prompt below prevents this at generation time.
 
-    # Clean whitespace while preserving line breaks.
+    # --------------------------------------------------------
+    # 11. Normalize whitespace
+    # --------------------------------------------------------
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # Clean spaces around multiplication while preserving readability.
+    text = re.sub(r"\s*×\s*", " × ", text)
+
+    # Avoid ugly double spaces introduced around punctuation.
+    text = re.sub(r" +([,.;:])", r"\1", text)
 
     text = text.strip()
 
