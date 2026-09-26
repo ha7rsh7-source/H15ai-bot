@@ -159,7 +159,44 @@ If a remembered answer disagrees with a properly checked calculation,
 trust the properly checked calculation and explain the discrepancy.
 
 ==================================================
-5. TELEGRAM-SAFE FORMATTING — VERY IMPORTANT
+5. MATHEMATICAL EXPRESSION INTEGRITY — EXTREMELY IMPORTANT
+==================================================
+
+When the user writes a mathematical expression, preserve its structure exactly.
+A slash means division/fraction and MUST NEVER be removed.
+
+CRITICAL EXAMPLES:
+- 3/x is NOT 3x.
+- 9/x² is NOT 9x².
+- 1/2 is NOT 12.
+- 3/(2x) is NOT 3/2x unless the intended grouping is clear.
+- 2x + 3/x = 7 must remain 2x + 3/x = 7.
+- 4x² + 9/x² must remain 4x² + 9/x².
+
+Before solving, copy the user's mathematical expression mentally exactly as written.
+Do not simplify, rewrite, or change fractions merely for formatting.
+If you use an identity, preserve every term and denominator.
+
+For example, if:
+2x + 3/x = 7
+
+then define:
+a = 2x
+b = 3/x
+
+NOT:
+a = 2x
+b = 3x
+
+When calculating ab:
+ab = (2x)(3/x) = 6
+
+Never invent a different expression while solving.
+
+If a generated equation is uncertain, stop and re-check it against the original question before sending.
+
+==================================================
+6. TELEGRAM-SAFE FORMATTING — VERY IMPORTANT
 ==================================================
 
 ALL responses must be safe and readable in Telegram.
@@ -238,89 +275,7 @@ v = u + at
 where u = 0
 
 ==================================================
-6.5 FRACTIONS — VERY IMPORTANT
-==================================================
-
-Never write a fraction in a way that can be mistaken for a normal
-two-digit number.
-
-For example, NEVER write:
-
-12 × 2 × 10²
-
-when you mean:
-
-½ × 2 × 10²
-
-Always write the half symbol:
-
-½
-
-So the correct expression is:
-
-s = ut + ½at²
-
-Similarly:
-
-vavg = (u + v) ÷ 2
-
-NOT:
-
-vavg = u + v2
-
-For simple fractions, prefer:
-
-½
-¼
-¾
-⅓
-⅔
-
-For other fractions, use:
-
-numerator ÷ denominator
-
-Example:
-
-3 ÷ 5
-
-Do NOT remove the division meaning.
-
-For expressions such as:
-
-1/x
-
-write:
-
-1 ÷ x
-
-For:
-
-1/x²
-
-write:
-
-1 ÷ x²
-
-For:
-
-x + 1/x
-
-write:
-
-x + 1 ÷ x
-
-Use parentheses when needed to avoid ambiguity:
-
-(x + 1) ÷ 2
-
-NOT:
-
-x + 12
-
-==================================================
-==================================================
-6. SOLUTION PRESENTATION
+7. SOLUTION PRESENTATION
 ==================================================
 
 When solving Maths, Physics, Chemistry or academic questions,
@@ -389,7 +344,7 @@ Do not dump symbols.
 Do not use raw LaTeX.
 
 ==================================================
-7. MATHS PRESENTATION
+8. MATHS PRESENTATION
 ==================================================
 
 - Show the method, not just the answer.
@@ -426,7 +381,7 @@ Final Answer:
 8
 
 ==================================================
-8. PHYSICS PRESENTATION
+9. PHYSICS PRESENTATION
 ==================================================
 
 For Physics:
@@ -470,7 +425,7 @@ Final Answer:
 20 m/s
 
 ==================================================
-9. CHEMISTRY PRESENTATION
+10. CHEMISTRY PRESENTATION
 ==================================================
 
 For Chemistry:
@@ -494,7 +449,7 @@ Final Answer
 - Keep equations separated.
 
 ==================================================
-10. SCHOOL / JEE LEVEL
+11. SCHOOL / JEE LEVEL
 ==================================================
 
 - Match the requested level.
@@ -506,7 +461,7 @@ Final Answer
   follow their terminology and level where possible.
 
 ==================================================
-11. IMAGE QUESTIONS
+12. IMAGE QUESTIONS
 ==================================================
 
 When given an image:
@@ -521,7 +476,7 @@ When given an image:
 - Never identify real people by name from images.
 
 ==================================================
-12. VIDEOS
+13. VIDEOS
 ==================================================
 
 - Videos are represented by sampled frames.
@@ -533,7 +488,7 @@ When given an image:
 - Never pretend to have watched every moment.
 
 ==================================================
-13. CONVERSATION
+14. CONVERSATION
 ==================================================
 
 - Use recent context when relevant.
@@ -543,7 +498,7 @@ When given an image:
   respect it.
 
 ==================================================
-14. PRIVACY
+15. PRIVACY
 ==================================================
 
 - Never claim access to private Telegram chats.
@@ -553,7 +508,7 @@ When given an image:
 - Never claim to know what another person is privately saying.
 
 ==================================================
-15. FINAL QUALITY CHECK
+16. FINAL QUALITY CHECK
 ==================================================
 
 Before sending an academic solution, silently check:
@@ -626,23 +581,35 @@ def _strip_left_right(text: str) -> str:
     return text
 
 
+def _format_frac_part(part: str) -> str:
+    """Keep grouping when a LaTeX fraction contains an expression."""
+    part = part.strip()
+    if not part:
+        return part
+    if re.search(r"[+\-×÷=]", part) or " " in part:
+        return f"({part})"
+    return part
+
+
 def _convert_frac(text: str) -> str:
-    """\\frac{A}{B} (nested braces allowed) -> 'A ÷ B', no parentheses added."""
+    """Convert real LaTeX fractions while preserving grouping."""
     result = []
     i = 0
     while i < len(text):
         if text[i:i + 5] == r"\frac":
             j = i + 5
-            while j < len(text) and text[j] == " ":
+            while j < len(text) and text[j].isspace():
                 j += 1
             if j < len(text) and text[j] == "{":
                 numerator, j = _extract_braced(text, j)
-                while j < len(text) and text[j] == " ":
+                while j < len(text) and text[j].isspace():
                     j += 1
                 if j < len(text) and text[j] == "{":
                     denominator, j = _extract_braced(text, j)
                     numerator = _convert_frac(numerator)
                     denominator = _convert_frac(denominator)
+                    numerator = _format_frac_part(numerator)
+                    denominator = _format_frac_part(denominator)
                     result.append(f"{numerator} ÷ {denominator}")
                     i = j
                     continue
@@ -651,82 +618,75 @@ def _convert_frac(text: str) -> str:
     return "".join(result)
 
 
-def _convert_sqrt(text: str) -> str:
-    """\\sqrt{A} -> '√A'."""
-    result = []
-    i = 0
-    while i < len(text):
-        if text[i:i + 5] == r"\sqrt":
-            j = i + 5
-            while j < len(text) and text[j] == " ":
-                j += 1
-            if j < len(text) and text[j] == "{":
-                content, j = _extract_braced(text, j)
-                content = _convert_sqrt(content)
-                content = _convert_frac(content)
-                result.append(f"√{content}")
-                i = j
+def repair_math_fractions(text: str, source_text: str) -> str:
+    """
+    Restore simple fractions that the model accidentally loses after generation.
+
+    This uses ONLY fractions that actually appeared in the user's source text,
+    so it does not invent denominators. It targets common algebraic forms such
+    as 3/x, 9/x² and 5/x³.
+    """
+    if not text or not source_text:
+        return text
+
+    fractions = re.findall(
+        r"(?<![A-Za-z0-9])([0-9]+)/(x(?:[²³⁴⁵⁶⁷⁸⁹])?)(?![A-Za-z0-9])",
+        source_text,
+    )
+
+    # Preserve order and avoid duplicate work.
+    seen = set()
+    for numerator, denominator in fractions:
+        key = (numerator, denominator)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        slash_form = f"{numerator}/{denominator}"
+        compact_form = f"{numerator}{denominator}"
+
+        # Only repair when the compact form exists in the generated answer.
+        # Do not globally rewrite prose; restrict replacements to common
+        # mathematical contexts/lines.
+        lines = text.split("\n")
+        for idx, line in enumerate(lines):
+            if compact_form not in line or slash_form in line:
                 continue
-        result.append(text[i])
-        i += 1
-    return "".join(result)
 
+            math_context = (
+                any(ch in line for ch in "=+-×÷()²³⁴⁵⁶⁷⁸⁹")
+                or any(
+                    label in line.lower()
+                    for label in (
+                        "given", "find", "formula", "solution",
+                        "substitution", "calculation", "answer",
+                        "identity", "therefore", "where",
+                    )
+                )
+            )
 
-def _strip_wrapping_command(text: str, command: str) -> str:
-    """Replace \\command{A} with just A (recursively cleaned). Handles nesting."""
-    result = []
-    i = 0
-    cmd_len = len(command)
-    while i < len(text):
-        if text[i:i + cmd_len] == command:
-            j = i + cmd_len
-            while j < len(text) and text[j] == " ":
-                j += 1
-            if j < len(text) and text[j] == "{":
-                content, j = _extract_braced(text, j)
-                content = _strip_wrapping_command(content, command)
-                result.append(content)
-                i = j
-                continue
-        result.append(text[i])
-        i += 1
-    return "".join(result)
+            if math_context:
+                lines[idx] = re.sub(
+                    rf"(?<![A-Za-z0-9/]){re.escape(compact_form)}(?![A-Za-z0-9])",
+                    slash_form,
+                    line,
+                )
 
+        text = "\n".join(lines)
 
-_SUPERSCRIPT_MAP = str.maketrans("0123456789n", "⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ")
-_SUBSCRIPT_MAP = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
-
-
-def _convert_scripts(text: str) -> str:
-    """x^{2} / x^2 -> x² , x_{1} / x_1 -> x₁ (drops the marker for anything else)."""
-
-    def repl_super(match):
-        content = match.group(1) or match.group(2)
-        if re.fullmatch(r"[0-9n]+", content):
-            return content.translate(_SUPERSCRIPT_MAP)
-        return content
-
-    def repl_sub(match):
-        content = match.group(1) or match.group(2)
-        if re.fullmatch(r"[0-9]+", content):
-            return content.translate(_SUBSCRIPT_MAP)
-        return content
-
-    text = re.sub(r"\^\{([^{}]*)\}|\^([A-Za-z0-9])", repl_super, text)
-    text = re.sub(r"_\{([^{}]*)\}|_([A-Za-z0-9])", repl_sub, text)
     return text
 
 
 def clean_reply(text: str) -> str:
     """
-    Clean model output for Telegram.
+    Clean model output for Telegram without corrupting normal fractions.
 
-    Important:
-    - Preserve normal slash fractions such as 3/x and 9/x².
-    - Never turn 3/x into 3x.
-    - Never turn 1/2 into 12.
-    - Convert actual LaTeX fractions to readable Unicode/plain text.
-    - Remove raw LaTeX commands.
+    Key guarantees:
+    - 3/x stays 3/x.
+    - 9/x² stays 9/x².
+    - 1/2 never becomes 12.
+    - Real LaTeX fractions are converted safely.
+    - aligned/environments are removed.
     """
 
     if not text:
@@ -735,7 +695,6 @@ def clean_reply(text: str) -> str:
             "Ek baar dobara try kar."
         )
 
-    # Speaker prefix
     text = re.sub(
         r"^\s*(assistant|h15ai)\s*:\s*",
         "",
@@ -743,13 +702,17 @@ def clean_reply(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Math delimiters
+    # Remove Telegram/LaTeX math delimiters.
     text = text.replace(r"\(", "").replace(r"\)", "")
     text = text.replace(r"\[", "").replace(r"\]", "")
-    text = text.replace("$$", "")
-    text = text.replace("$", "")
+    text = text.replace("$$", "").replace("$", "")
 
-    # LaTeX spacing commands only.
+    # Remove common LaTeX environments without touching their contents.
+    text = re.sub(r"\\begin\s*\{[^{}]*\}", "", text)
+    text = re.sub(r"\\end\s*\{[^{}]*\}", "", text)
+    text = text.replace("&", "")
+
+    # Spacing commands.
     for pattern in (
         r"\\quad",
         r"\\qquad",
@@ -764,26 +727,10 @@ def clean_reply(text: str) -> str:
         text = re.sub(pattern, " ", text)
 
     text = _strip_left_right(text)
-
-    # Convert real LaTeX fractions BEFORE removing commands.
     text = _convert_frac(text)
     text = _convert_sqrt(text)
 
-    # Simple Unicode fractions.
-    for old, new in {
-        "1 ÷ 2": "½",
-        "1 ÷ 4": "¼",
-        "3 ÷ 4": "¾",
-        "1 ÷ 3": "⅓",
-        "2 ÷ 3": "⅔",
-        "1 ÷ 5": "⅕",
-        "2 ÷ 5": "⅖",
-        "3 ÷ 5": "⅗",
-        "4 ÷ 5": "⅘",
-    }.items():
-        text = text.replace(old, new)
-
-    # Wrapper commands: preserve their contents.
+    # Common wrapping commands.
     for command in (
         r"\boxed",
         r"\text",
@@ -796,12 +743,11 @@ def clean_reply(text: str) -> str:
     ):
         text = _strip_wrapping_command(text, command)
 
-    # Empty scripts and normal scripts.
+    # Superscripts/subscripts.
     text = re.sub(r"\^\{\s*\}", "", text)
     text = re.sub(r"_\{\s*\}", "", text)
     text = _convert_scripts(text)
 
-    # Common symbols.
     replacements = {
         r"\times": "×",
         r"\cdot": "×",
@@ -831,57 +777,52 @@ def clean_reply(text: str) -> str:
         r"\to": "→",
         r"\therefore": "∴",
     }
-
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Middle dot -> multiplication sign.
     text = text.replace("·", "×")
 
-    # Remove remaining LaTeX command names.
+    # Remove any remaining command names, but NEVER touch ordinary '/'.
     text = re.sub(r"\\[a-zA-Z]+", "", text)
-
-    # Remove leftover backslashes ONLY.
-    # IMPORTANT: do NOT touch "/" because slash fractions are valid.
     text = text.replace("\\", "")
 
-    # Remove code fences and leftover LaTeX braces.
+    # Remove accidental code fences and unmatched braces.
     text = text.replace("```text", "")
     text = text.replace("```", "")
     text = text.replace("{", "").replace("}", "")
 
-    # --------------------------------------------------------------
-    # Fraction safety
-    # --------------------------------------------------------------
-    # If the model writes a normal fraction using "/", PRESERVE it.
-    #
-    # Examples that MUST remain readable:
-    #   3/x
-    #   9/x²
-    #   1/2
-    #   (u + v)/2
-    #
-    # Never globally replace "/" with "÷".
-    # Never remove "/" during whitespace cleanup.
-
-    # Normalize accidental spaces around slash.
+    # Keep normal slash fractions exactly as slash fractions.
     text = re.sub(r"\s*/\s*", "/", text)
 
-    # Remove spaces around multiplication, but keep line structure.
+    # Never leave the common LaTeX alignment artifacts.
+    text = re.sub(r"\baligned\b", "", text, flags=re.IGNORECASE)
+
+    # Readable multiplication spacing; do NOT touch '/'.
     text = re.sub(r"\s*×\s*", " × ", text)
-
-    # Clean repeated spaces without touching slash fractions.
     text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r" +([,.;:])", r"\1", text)
-
+    text = re.sub(r"\n[ \t]+", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     text = text.strip()
+
+    # Convert a few simple Unicode fractions only when they are safely exact.
+    for old, new in {
+        "1 ÷ 2": "½",
+        "1 ÷ 4": "¼",
+        "3 ÷ 4": "¾",
+        "1 ÷ 3": "⅓",
+        "2 ÷ 3": "⅔",
+        "1 ÷ 5": "⅕",
+        "2 ÷ 5": "⅖",
+        "3 ÷ 5": "⅗",
+        "4 ÷ 5": "⅘",
+    }.items():
+        text = text.replace(old, new)
 
     if len(text) > 3900:
         text = text[:3890] + "\n\n…(reply shortened)"
 
     return text
-
 
 def image_to_data_url(
     image_bytes: bytes,
@@ -1459,12 +1400,21 @@ async def chat(
             history
         )
 
-        answer = clean_reply(
+        raw_answer = (
             response
             .choices[0]
             .message
             .content
         )
+
+        # Repair only simple fractions that were explicitly present in the
+        # user's message, then run the Telegram-safe cleaner.
+        raw_answer = repair_math_fractions(
+            raw_answer,
+            user_text,
+        )
+
+        answer = clean_reply(raw_answer)
 
         history.append(
             {
@@ -1555,6 +1505,8 @@ async def photo_chat(
         user_text = caption or (
             "Analyze this image carefully. "
             "If it contains a question, solve it. "
+            "Preserve every mathematical fraction exactly as visible: "
+            "3/x must never become 3x, and 1/2 must never become 12. "
             "Use clean Telegram-safe plain text. "
             "Do not use raw LaTeX. "
             "Use Given, To Find, Formula, Solution "
@@ -1597,12 +1549,19 @@ async def photo_chat(
             ],
         )
 
-        answer = clean_reply(
+        raw_answer = (
             response
             .choices[0]
             .message
             .content
         )
+
+        raw_answer = repair_math_fractions(
+            raw_answer,
+            user_text,
+        )
+
+        answer = clean_reply(raw_answer)
 
         history.append(
             {
@@ -1860,12 +1819,19 @@ async def video_chat(
             ],
         )
 
-        answer = clean_reply(
+        raw_answer = (
             response
             .choices[0]
             .message
             .content
         )
+
+        raw_answer = repair_math_fractions(
+            raw_answer,
+            user_text,
+        )
+
+        answer = clean_reply(raw_answer)
 
         history.append(
             {
@@ -2122,4 +2088,3 @@ if __name__ == "__main__":
     asyncio.run(
         run_bot()
     )
-    
