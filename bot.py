@@ -636,6 +636,7 @@ def _convert_scripts(text: str) -> str:
 
 
 def clean_reply(text: str) -> str:
+    """Convert model output into clean Telegram-safe plain text."""
 
     if not text:
         return (
@@ -650,36 +651,51 @@ def clean_reply(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Plain delimiters first
+    # Remove LaTeX delimiters.
     text = text.replace(r"\(", "").replace(r"\)", "")
     text = text.replace(r"\[", "").replace(r"\]", "")
     text = text.replace("$$", "").replace("$", "")
 
-    # \left( \right) etc -> just the delimiter char
+    # Remove LaTeX spacing commands such as \;, \,, \quad, etc.
+    text = re.sub(
+        r"\\(?:[,;!:]|quad|qquad|enspace|hspace\*?)(?:\{[^{}]*\})?",
+        "",
+        text,
+    )
+
     text = _strip_left_right(text)
 
-    # Nested-aware conversions (order matters: frac/sqrt before wrapping commands)
+    # Convert fractions and square roots before removing wrapper commands.
     text = _convert_frac(text)
     text = _convert_sqrt(text)
 
-    for command in (r"\boxed", r"\text", r"\mathrm", r"\mathbf", r"\operatorname", r"\displaystyle"):
+    for command in (
+        r"\boxed",
+        r"\text",
+        r"\mathrm",
+        r"\mathbf",
+        r"\operatorname",
+        r"\displaystyle",
+        r"\overline",
+        r"\underline",
+    ):
         text = _strip_wrapping_command(text, command)
 
-    # Superscripts / subscripts
+    # Remove empty superscript/subscript markers.
+    text = re.sub(r"\^\{\s*\}", "", text)
+    text = re.sub(r"_\{\s*\}", "", text)
+
+    # Convert x², x₁, etc.
     text = _convert_scripts(text)
 
-    # Remove empty script markers such as h_{} or x^{}
-    text = re.sub(r"_\{\s*\}", "", text)
-    text = re.sub(r"\^\{\s*\}", "", text)
-
-    # Remove common LaTeX spacing commands
-    text = re.sub(r"\\(?:,|;|:|!|quad|qquad|enspace|thinspace|medspace|thickspace)\s*", " ", text)
-
-    # Common LaTeX symbols
+    # Common LaTeX symbols.
     replacements = {
         r"\times": "×",
         r"\cdot": "×",
+        r"\ast": "×",
         r"\div": "÷",
+        r"\pm": "±",
+        r"\mp": "∓",
         r"\pi": "π",
         r"\Delta": "Δ",
         r"\theta": "θ",
@@ -689,33 +705,47 @@ def clean_reply(text: str) -> str:
         r"\lambda": "λ",
         r"\mu": "μ",
         r"\rho": "ρ",
+        r"\sigma": "σ",
+        r"\omega": "ω",
         r"\leq": "≤",
+        r"\le": "≤",
         r"\geq": "≥",
+        r"\ge": "≥",
         r"\neq": "≠",
-        r"\pm": "±",
+        r"\approx": "≈",
+        r"\infty": "∞",
+        r"\rightarrow": "→",
+        r"\to": "→",
+        r"\therefore": "∴",
     }
 
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Any remaining LaTeX command word (backslash + letters), whatever's left
+    # Telegram-readable multiplication.
+    text = text.replace("·", "×")
+
+    # Remove any remaining LaTeX command names.
     text = re.sub(r"\\[a-zA-Z]+", "", text)
 
-    # Safety net: strip any stray braces that never got matched to a command
+    # Remove leftover LaTeX spacing escapes.
+    for spacing in (r"\,", r"\;", r"\!", r"\:", r"\ ", r"\quad", r"\qquad"):
+        text = text.replace(spacing, " ")
+
+    # Safety net for unmatched braces.
     text = text.replace("{", "").replace("}", "")
 
-    # Tidy up whitespace created by all the removals
+    # Do not leave academic answers inside code fences.
+    text = text.replace("```text", "").replace("```", "")
+
+    # Clean whitespace while preserving line breaks.
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
 
     text = text.strip()
 
     if len(text) > 3900:
-
-        text = (
-            text[:3890]
-            + "\n\n…(reply shortened)"
-        )
+        text = text[:3890] + "\n\n…(reply shortened)"
 
     return text
 
