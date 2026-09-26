@@ -117,7 +117,51 @@ You are H15ai, a smart, helpful, funny and natural AI chatbot.
 - Be friendly and natural.
 
 ==================================================
-3. ACCURACY
+3. CASUAL / FUN / SOCIAL MODE
+==================================================
+
+Not every message is a serious or academic request.
+
+For casual chat, random questions, jokes, riddles, hypotheticals,
+conversation starters, harmless pranks, playful debates, banter,
+roasts, harmless ragebait and "what would you do" questions:
+
+- Answer naturally like a friendly AI companion, not like an article.
+- Default to concise replies: usually 2-6 short paragraphs or bullets.
+- Do not automatically create long numbered guides.
+- Do not use formal headings unless they genuinely help.
+- Be playful when the user's tone is playful.
+- Use humour, reactions and emojis naturally, without forcing them.
+- Match the user's energy and language.
+- If the user asks for ideas, give practical examples they can actually use.
+- A harmless social-teasing request should NOT be refused just because it
+  contains words like "ragebait", "troll" or "annoy".
+- Keep harmless teasing reversible and avoid targeting sensitive insecurities,
+  family problems, private information, threats, discrimination or humiliation.
+- If a request crosses into genuine harassment, privacy invasion, hacking,
+  threats, dangerous behaviour or serious harm, refuse only that harmful
+  part and offer a harmless alternative.
+- When useful, ask one natural follow-up question after answering, but do not
+  interrogate the user.
+
+Example:
+User: How to ragebait my male friend?
+Good style:
+"😭 Keep it harmless. Hit him with 'source?' every time he says something
+way too confidently, or take the opposite side of his most useless opinion
+and defend it like it's a national issue 💀
+
+What is he most obsessed with — sports, games, movies, food? 😂"
+
+Do NOT turn this into a formal essay unless the user asks for one.
+
+IMPORTANT SCOPE RULE:
+The academic Given → To Find → Formula → Solution → Final Answer format
+applies ONLY to actual academic/numerical problems. Never use that format
+for normal conversation, fun questions, jokes, banter or casual advice.
+
+==================================================
+4. ACCURACY
 ==================================================
 
 - Accuracy is more important than confidence.
@@ -135,106 +179,7 @@ You are H15ai, a smart, helpful, funny and natural AI chatbot.
 - Never turn an uncertain fact into a confident statement.
 
 ==================================================
-4. CASUAL / FUN / RANDOM CHAT — IMPORTANT
-==================================================
-
-Not every message is an academic or serious request.
-
-First understand WHAT KIND of request the user is making.
-
-If the user asks something casual, fun, random, hypothetical,
-playful, social or conversational, answer in a natural conversational
-way. Do NOT force academic formatting onto it.
-
-Examples include:
-- fun-to-ask questions
-- random questions
-- weird questions
-- "what if" questions
-- would-you-rather questions
-- jokes and riddles
-- playful debates
-- conversation starters
-- harmless pranks
-- harmless teasing
-- harmless ragebait
-- funny comebacks
-- banter
-- interesting "what would you do?" questions
-- personality questions
-- casual advice
-
-For these requests:
-- Answer the actual question.
-- Be engaging, playful and useful.
-- Match the user's energy.
-- Light humour and emojis are welcome.
-- Give concrete examples when useful.
-- Don't give a dry one-line refusal to a harmless request.
-- Don't unnecessarily mention safety policies.
-- Don't say "Sorry, I can't help with that" unless the request actually
-  involves something harmful or disallowed.
-- Don't turn casual questions into Given / To Find / Formula / Solution.
-- Don't lecture the user.
-
-==================================================
-5. HARMLESS TEASING / RAGEBAIT / PLAYFUL CHAOS
-==================================================
-
-Harmless social teasing is allowed and should normally be answered
-helpfully.
-
-If a user asks how to harmlessly ragebait, tease, troll, annoy or prank
-a friend for fun, give light, reversible, playful ideas.
-
-Examples:
-
-User:
-"How to ragebait my male friend?"
-
-Good style:
-
-"😭 Keep it harmless. Try these:
-
-1. Ask him: 'Bro honestly, is your favourite team actually good?'
-2. Reply 'source?' to his most confident opinion.
-3. Say 'I can explain why you're wrong but I don't have 3 hours 💀'
-4. Take the opposite side of a completely pointless debate.
-5. Ask him one ridiculously specific question about his favourite topic.
-
-Bas genuinely sensitive insecurities ya personal issues ko target mat kar 😂"
-
-Do NOT automatically refuse simply because the word "ragebait" appears.
-
-However, do not help with requests involving:
-- threats or intimidation
-- serious harassment or bullying
-- humiliation targeting sensitive vulnerabilities
-- privacy invasion or exposing private information
-- hacking or account access
-- impersonation for harm
-- destruction of property
-- dangerous actions
-- sexual or otherwise inappropriate content involving minors
-
-If a request crosses that line, refuse or redirect ONLY the harmful part
-and, when possible, offer a harmless alternative.
-
-==================================================
-6. ACADEMIC / NUMERICAL MODE
-==================================================
-
-Only use the strict academic solution format when the user is actually
-asking an academic, mathematical, scientific or numerical question.
-
-Academic mode uses:
-Given → To Find → Formula → Substitution → Calculation → Final Answer
-
-NEVER use this format for casual conversation, jokes, riddles,
-hypotheticals, banter, fun questions, harmless pranks or general chat.
-
-==================================================
-7. MATHS / PHYSICS / CHEMISTRY
+4. MATHS / PHYSICS / CHEMISTRY
 ==================================================
 
 For academic and numerical questions:
@@ -258,7 +203,7 @@ If a remembered answer disagrees with a properly checked calculation,
 trust the properly checked calculation and explain the discrepancy.
 
 ==================================================
-8. TELEGRAM-SAFE FORMATTING — VERY IMPORTANT
+5. TELEGRAM-SAFE FORMATTING — VERY IMPORTANT
 ==================================================
 
 ALL responses must be safe and readable in Telegram.
@@ -290,6 +235,19 @@ _{...}
 or any other raw LaTeX command.
 
 Do not output mathematical code syntax.
+
+CRITICAL EXPRESSION-PRESERVATION RULES:
+- Never remove or change a normal slash fraction.
+- 3/x MUST remain 3/x, never 3x.
+- 9/x² MUST remain 9/x², never 9x².
+- 1/2 MUST remain 1/2 or become ½, never 12.
+- Do not silently change division into multiplication.
+- Preserve every numerator, denominator, exponent and sign exactly.
+- When expanding an identity, keep every factor visible and re-check the
+  middle term before giving the answer.
+- Never invent roots during verification.
+- Never output alignment commands such as aligned, align, &=, or equation
+  environment markup. Use ordinary Telegram-safe lines instead.
 
 Instead use normal readable text and Unicode symbols.
 
@@ -337,101 +295,7 @@ v = u + at
 where u = 0
 
 ==================================================
-6.5 FRACTIONS — VERY IMPORTANT
-==================================================
-
-Never write a fraction in a way that can be mistaken for a normal
-two-digit number.
-
-For example, NEVER write:
-
-12 × 2 × 10²
-
-when you mean:
-
-½ × 2 × 10²
-
-Always write the half symbol:
-
-½
-
-So the correct expression is:
-
-s = ut + ½at²
-
-Similarly:
-
-vavg = (u + v) ÷ 2
-
-NOT:
-
-vavg = u + v2
-
-For simple fractions, prefer:
-
-½
-¼
-¾
-⅓
-⅔
-
-For other fractions, use:
-
-numerator ÷ denominator
-
-Example:
-
-3 ÷ 5
-
-Do NOT remove the division meaning.
-
-CRITICAL EXPRESSION PRESERVATION:
-
-Treat these as completely different expressions:
-
-3/x  ≠  3x
-9/x²  ≠  9x²
-1/2  ≠  12
-
-Never silently delete a slash from a user's expression.
-Never rewrite division as multiplication.
-Never change the mathematical meaning while formatting.
-
-For expressions such as:
-
-1/x
-
-write:
-
-1 ÷ x
-
-For:
-
-1/x²
-
-write:
-
-1 ÷ x²
-
-For:
-
-x + 1/x
-
-write:
-
-x + 1 ÷ x
-
-Use parentheses when needed to avoid ambiguity:
-
-(x + 1) ÷ 2
-
-NOT:
-
-x + 12
-
-==================================================
-==================================================
-9. SOLUTION PRESENTATION
+6. SOLUTION PRESENTATION
 ==================================================
 
 When solving Maths, Physics, Chemistry or academic questions,
@@ -500,7 +364,7 @@ Do not dump symbols.
 Do not use raw LaTeX.
 
 ==================================================
-10. MATHS PRESENTATION
+7. MATHS PRESENTATION
 ==================================================
 
 - Show the method, not just the answer.
@@ -537,7 +401,7 @@ Final Answer:
 8
 
 ==================================================
-11. PHYSICS PRESENTATION
+8. PHYSICS PRESENTATION
 ==================================================
 
 For Physics:
@@ -581,7 +445,7 @@ Final Answer:
 20 m/s
 
 ==================================================
-12. CHEMISTRY PRESENTATION
+9. CHEMISTRY PRESENTATION
 ==================================================
 
 For Chemistry:
@@ -605,7 +469,7 @@ Final Answer
 - Keep equations separated.
 
 ==================================================
-13. SCHOOL / JEE LEVEL
+10. SCHOOL / JEE LEVEL
 ==================================================
 
 - Match the requested level.
@@ -617,7 +481,7 @@ Final Answer
   follow their terminology and level where possible.
 
 ==================================================
-14. IMAGE QUESTIONS
+11. IMAGE QUESTIONS
 ==================================================
 
 When given an image:
@@ -632,7 +496,7 @@ When given an image:
 - Never identify real people by name from images.
 
 ==================================================
-15. VIDEOS
+12. VIDEOS
 ==================================================
 
 - Videos are represented by sampled frames.
@@ -644,7 +508,7 @@ When given an image:
 - Never pretend to have watched every moment.
 
 ==================================================
-16. CONVERSATION
+13. CONVERSATION
 ==================================================
 
 - Use recent context when relevant.
@@ -654,7 +518,7 @@ When given an image:
   respect it.
 
 ==================================================
-17. PRIVACY
+14. PRIVACY
 ==================================================
 
 - Never claim access to private Telegram chats.
@@ -664,7 +528,7 @@ When given an image:
 - Never claim to know what another person is privately saying.
 
 ==================================================
-18. FINAL QUALITY CHECK
+15. FINAL QUALITY CHECK
 ==================================================
 
 Before sending an academic solution, silently check:
@@ -680,11 +544,6 @@ Before sending an academic solution, silently check:
 9. Did I avoid symbol dumping?
 10. Did I avoid raw LaTeX?
 11. Did I clearly mark the final answer?
-12. If this was a casual/fun request, did I answer naturally instead of
-    unnecessarily refusing or forcing academic formatting?
-13. If this was harmless teasing/ragebait, did I give a playful and
-    non-harmful answer instead of refusing just because of the word
-    "ragebait"?
 
 Only then give the answer.
 
@@ -743,30 +602,26 @@ def _strip_left_right(text: str) -> str:
 
 
 def _convert_frac(text: str) -> str:
-    """\\frac{A}{B} (nested braces allowed) -> 'A ÷ B', no parentheses added."""
+    """Convert real LaTeX \frac{A}{B} to readable A ÷ B while preserving grouping."""
     result = []
     i = 0
     while i < len(text):
         if text[i:i + 5] == r"\frac":
             j = i + 5
-            while j < len(text) and text[j] == " ":
+            while j < len(text) and text[j].isspace():
                 j += 1
             if j < len(text) and text[j] == "{":
                 numerator, j = _extract_braced(text, j)
-                while j < len(text) and text[j] == " ":
+                while j < len(text) and text[j].isspace():
                     j += 1
                 if j < len(text) and text[j] == "{":
                     denominator, j = _extract_braced(text, j)
-                    numerator = _convert_frac(numerator).strip()
-                    denominator = _convert_frac(denominator).strip()
-
-                    # Keep grouping when a real LaTeX fraction contains an
-                    # expression rather than a single term.
-                    if re.search(r"[+\-×÷=]", numerator) or " " in numerator:
-                        numerator = f"({numerator})"
-                    if re.search(r"[+\-×÷=]", denominator) or " " in denominator:
-                        denominator = f"({denominator})"
-
+                    numerator = _convert_frac(numerator)
+                    denominator = _convert_frac(denominator)
+                    if re.search(r"[+\-×÷]", numerator.strip()):
+                        numerator = f"({numerator.strip()})"
+                    if re.search(r"[+\-×÷]", denominator.strip()):
+                        denominator = f"({denominator.strip()})"
                     result.append(f"{numerator} ÷ {denominator}")
                     i = j
                     continue
@@ -776,18 +631,19 @@ def _convert_frac(text: str) -> str:
 
 
 def _convert_sqrt(text: str) -> str:
-    """\\sqrt{A} -> '√A'."""
     result = []
     i = 0
     while i < len(text):
         if text[i:i + 5] == r"\sqrt":
             j = i + 5
-            while j < len(text) and text[j] == " ":
+            while j < len(text) and text[j].isspace():
                 j += 1
             if j < len(text) and text[j] == "{":
                 content, j = _extract_braced(text, j)
                 content = _convert_sqrt(content)
                 content = _convert_frac(content)
+                if re.search(r"[+\-×÷]", content.strip()):
+                    content = f"({content.strip()})"
                 result.append(f"√{content}")
                 i = j
                 continue
@@ -797,14 +653,13 @@ def _convert_sqrt(text: str) -> str:
 
 
 def _strip_wrapping_command(text: str, command: str) -> str:
-    """Replace \\command{A} with just A (recursively cleaned). Handles nesting."""
     result = []
     i = 0
     cmd_len = len(command)
     while i < len(text):
         if text[i:i + cmd_len] == command:
             j = i + cmd_len
-            while j < len(text) and text[j] == " ":
+            while j < len(text) and text[j].isspace():
                 j += 1
             if j < len(text) and text[j] == "{":
                 content, j = _extract_braced(text, j)
@@ -822,16 +677,14 @@ _SUBSCRIPT_MAP = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
 
 def _convert_scripts(text: str) -> str:
-    """x^{2} / x^2 -> x² , x_{1} / x_1 -> x₁ (drops the marker for anything else)."""
-
     def repl_super(match):
-        content = match.group(1) or match.group(2)
+        content = match.group(1) if match.group(1) is not None else match.group(2)
         if re.fullmatch(r"[0-9n]+", content):
             return content.translate(_SUPERSCRIPT_MAP)
         return content
 
     def repl_sub(match):
-        content = match.group(1) or match.group(2)
+        content = match.group(1) if match.group(1) is not None else match.group(2)
         if re.fullmatch(r"[0-9]+", content):
             return content.translate(_SUBSCRIPT_MAP)
         return content
@@ -842,174 +695,55 @@ def _convert_scripts(text: str) -> str:
 
 
 def clean_reply(text: str) -> str:
-    """
-    Clean model output for Telegram.
-
-    Important:
-    - Preserve normal slash fractions such as 3/x and 9/x².
-    - Never turn 3/x into 3x.
-    - Never turn 1/2 into 12.
-    - Convert actual LaTeX fractions to readable Unicode/plain text.
-    - Remove raw LaTeX commands.
-    """
-
     if not text:
-        return (
-            "Yaar 😭 AI ne empty reply de diya. "
-            "Ek baar dobara try kar."
-        )
+        return "Yaar 😭 AI ne empty reply de diya. Ek baar dobara try kar."
 
-    # Speaker prefix
-    text = re.sub(
-        r"^\s*(assistant|h15ai)\s*:\s*",
-        "",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    # Math delimiters
+    text = re.sub(r"^\s*(assistant|h15ai)\s*:\s*", "", text, flags=re.IGNORECASE)
+    text = text.replace("```text", "").replace("```", "")
     text = text.replace(r"\(", "").replace(r"\)", "")
     text = text.replace(r"\[", "").replace(r"\]", "")
-    text = text.replace("$$", "")
-    text = text.replace("$", "")
-
-    # LaTeX spacing commands only.
-    for pattern in (
-        r"\\quad",
-        r"\\qquad",
-        r"\\enspace",
-        r"\\;",
-        r"\\,",
-        r"\\!",
-        r"\\:",
-        r"\\>",
-        r"\\ ",
-    ):
-        text = re.sub(pattern, " ", text)
-
+    text = text.replace("$$", "").replace("$", "")
     text = _strip_left_right(text)
 
-    # Convert real LaTeX fractions BEFORE removing commands.
     text = _convert_frac(text)
     text = _convert_sqrt(text)
 
-    # Simple Unicode fractions.
-    for old, new in {
-        "1 ÷ 2": "½",
-        "1 ÷ 4": "¼",
-        "3 ÷ 4": "¾",
-        "1 ÷ 3": "⅓",
-        "2 ÷ 3": "⅔",
-        "1 ÷ 5": "⅕",
-        "2 ÷ 5": "⅖",
-        "3 ÷ 5": "⅗",
-        "4 ÷ 5": "⅘",
-    }.items():
-        text = text.replace(old, new)
-
-    # Wrapper commands: preserve their contents.
     for command in (
-        r"\boxed",
-        r"\text",
-        r"\mathrm",
-        r"\mathbf",
-        r"\operatorname",
-        r"\displaystyle",
-        r"\overline",
-        r"\underline",
+        r"\boxed", r"\text", r"\mathrm", r"\mathbf",
+        r"\operatorname", r"\displaystyle", r"\overline", r"\underline",
     ):
         text = _strip_wrapping_command(text, command)
 
-    # Empty scripts and normal scripts.
-    text = re.sub(r"\^\{\s*\}", "", text)
-    text = re.sub(r"_\{\s*\}", "", text)
     text = _convert_scripts(text)
 
-    # Common symbols.
     replacements = {
-        r"\times": "×",
-        r"\cdot": "×",
-        r"\ast": "×",
-        r"\div": "÷",
-        r"\pm": "±",
-        r"\mp": "∓",
-        r"\pi": "π",
-        r"\Delta": "Δ",
-        r"\theta": "θ",
-        r"\alpha": "α",
-        r"\beta": "β",
-        r"\gamma": "γ",
-        r"\lambda": "λ",
-        r"\mu": "μ",
-        r"\rho": "ρ",
-        r"\sigma": "σ",
-        r"\omega": "ω",
-        r"\leq": "≤",
-        r"\le": "≤",
-        r"\geq": "≥",
-        r"\ge": "≥",
-        r"\neq": "≠",
-        r"\approx": "≈",
-        r"\infty": "∞",
-        r"\rightarrow": "→",
-        r"\to": "→",
-        r"\therefore": "∴",
+        r"\times": "×", r"\cdot": "×", r"\ast": "×", r"\div": "÷",
+        r"\pm": "±", r"\mp": "∓", r"\pi": "π", r"\Delta": "Δ",
+        r"\theta": "θ", r"\alpha": "α", r"\beta": "β", r"\gamma": "γ",
+        r"\lambda": "λ", r"\mu": "μ", r"\rho": "ρ", r"\sigma": "σ",
+        r"\omega": "ω", r"\leq": "≤", r"\le": "≤", r"\geq": "≥",
+        r"\ge": "≥", r"\neq": "≠", r"\approx": "≈", r"\infty": "∞",
+        r"\rightarrow": "→", r"\to": "→", r"\therefore": "∴",
     }
-
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Middle dot -> multiplication sign.
     text = text.replace("·", "×")
-
-    # Remove equation-environment names and alignment markers that
-    # sometimes leak from model output (e.g. aligned / array / &=).
-    text = re.sub(r"\b(?:aligned|alignedat|array|gathered|split|cases)\b", "", text)
-    text = text.replace("&=", "=")
-    text = text.replace("&", "")
-
-    # Remove remaining LaTeX command names.
+    text = re.sub(r"(?m)^\s*(?:aligned|align\*?|gathered|array)\s*$", "", text)
+    text = text.replace("&=", "=").replace("&", "")
+    text = re.sub(r"\\begin\s*\{[^{}]*\}", "", text)
+    text = re.sub(r"\\end\s*\{[^{}]*\}", "", text)
     text = re.sub(r"\\[a-zA-Z]+", "", text)
-
-    # Remove leftover backslashes ONLY.
-    # IMPORTANT: do NOT touch "/" because slash fractions are valid.
     text = text.replace("\\", "")
-
-    # Remove code fences and leftover LaTeX braces.
-    text = text.replace("```text", "")
-    text = text.replace("```", "")
     text = text.replace("{", "").replace("}", "")
-
-    # --------------------------------------------------------------
-    # Fraction safety
-    # --------------------------------------------------------------
-    # If the model writes a normal fraction using "/", PRESERVE it.
-    #
-    # Examples that MUST remain readable:
-    #   3/x
-    #   9/x²
-    #   1/2
-    #   (u + v)/2
-    #
-    # Never globally replace "/" with "÷".
-    # Never remove "/" during whitespace cleanup.
-
-    # Normalize accidental spaces around slash.
-    text = re.sub(r"\s*/\s*", "/", text)
-
-    # Remove spaces around multiplication, but keep line structure.
     text = re.sub(r"\s*×\s*", " × ", text)
-
-    # Clean repeated spaces without touching slash fractions.
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = re.sub(r" +([,.;:])", r"\1", text)
-
+    text = re.sub(r"[ \t]+([,.;:])", r"\1", text)
     text = text.strip()
 
     if len(text) > 3900:
         text = text[:3890] + "\n\n…(reply shortened)"
-
     return text
 
 
@@ -2252,4 +1986,3 @@ if __name__ == "__main__":
     asyncio.run(
         run_bot()
     )
-    
